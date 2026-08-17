@@ -1,7 +1,7 @@
 {
   "id": "pf2e-awesome-variant-rules",
   "title": "PF2e Awesome Variant Rules",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibility": {
     "minimum": "14",
     "verified": "14"
@@ -25,9 +25,9 @@
       }
     },
     {
-      "name": "pf2e-awesome-variant-rules-general-feats",
-      "label": "PF2e Awesome Variant Rules - General Feats",
-      "path": "packs/pf2e-awesome-variant-rules-general-feats",
+      "name": "pf2e-awesome-variant-rules-skill-feats",
+      "label": "PF2e Awesome Variant Rules - Skill Feats",
+      "path": "packs/pf2e-awesome-variant-rules-skill-feats",
       "type": "Item",
       "system": "pf2e",
       "ownership": {

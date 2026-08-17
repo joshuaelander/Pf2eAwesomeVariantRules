@@ -41,7 +41,65 @@ export function convertSpellDiceFormula(formula) {
 }
 
 /**
- * Recursively or structurally transforms damage objects/instances in PF2e damage data.
+ * Converts damage formulas inside a Spell document's system data.
+ * Modifies base damage, interval heightening, and fixed-level heightening.
+ * 
+ * @param {object} systemData - Spell system data object
+ */
+export function convertSpellSystemData(systemData) {
+    if (!systemData) return;
+
+    // 1. Base damage entries (e.g. system.damage[0].formula)
+    if (systemData.damage && typeof systemData.damage === "object") {
+        for (const [key, dmg] of Object.entries(systemData.damage)) {
+            if (typeof dmg === "string") {
+                systemData.damage[key] = convertSpellDiceFormula(dmg);
+            } else if (dmg && typeof dmg === "object") {
+                if (dmg.formula) {
+                    dmg.formula = convertSpellDiceFormula(dmg.formula);
+                }
+                if (dmg.value) {
+                    dmg.value = convertSpellDiceFormula(dmg.value);
+                }
+            }
+        }
+    }
+
+    // 2. Heightening entries
+    if (systemData.heightening) {
+        // Interval heightening (e.g. system.heightening.damage[0] = "1d8")
+        if (systemData.heightening.damage && typeof systemData.heightening.damage === "object") {
+            for (const [key, dmg] of Object.entries(systemData.heightening.damage)) {
+                if (typeof dmg === "string") {
+                    systemData.heightening.damage[key] = convertSpellDiceFormula(dmg);
+                } else if (dmg && typeof dmg === "object") {
+                    if (dmg.formula) {
+                        dmg.formula = convertSpellDiceFormula(dmg.formula);
+                    }
+                }
+            }
+        }
+        // Fixed rank heightening (e.g. system.heightening.levels[3].damage[0].formula)
+        if (systemData.heightening.levels && typeof systemData.heightening.levels === "object") {
+            for (const levelData of Object.values(systemData.heightening.levels)) {
+                if (levelData?.damage && typeof levelData.damage === "object") {
+                    for (const [key, dmg] of Object.entries(levelData.damage)) {
+                        if (typeof dmg === "string") {
+                            levelData.damage[key] = convertSpellDiceFormula(dmg);
+                        } else if (dmg && typeof dmg === "object") {
+                            if (dmg.formula) {
+                                dmg.formula = convertSpellDiceFormula(dmg.formula);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Fallback transformation of damage objects/instances in PF2e damage data.
  * @param {object} damage - The damage object returned by spell.getDamage()
  */
 export function transformDamageObject(damage) {
@@ -87,21 +145,32 @@ export function registerSplitDamageCardButtons() {
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
-        // Check if message has a spell damage button
-        const damageBtn = root.querySelector('button[data-action="spell-damage"], button[data-action="spellDamage"]');
-        if (!damageBtn) return;
+        // Check if message has a spell damage or healing button
+        const actionBtn = root.querySelector([
+            'button[data-action="spell-damage"]',
+            'button[data-action="spellDamage"]',
+            'button[data-action="spell-healing"]',
+            'button[data-action="spellHealing"]'
+        ].join(", "));
+
+        if (!actionBtn) return;
 
         // Prevent duplicate buttons on re-render
         if (root.querySelector('.pf2e-split-damage-btn')) return;
 
-        // Create the Split Dice Damage button
+        // Determine button label and icon based on damage vs healing
+        const actionType = actionBtn.getAttribute("data-action") || "";
+        const isHealing = actionType.toLowerCase().includes("heal");
+        const actionLabel = isHealing ? "Split Dice Healing" : "Split Dice Damage";
+        const iconClass = isHealing ? "fa-solid fa-heart-pulse" : "fa-solid fa-dice-d6";
+
+        // Create the Split Dice button matching native PF2e button classes
         const splitBtn = document.createElement("button");
         splitBtn.type = "button";
-        splitBtn.className = "pf2e-split-damage-btn";
+        splitBtn.className = `${actionBtn.className} pf2e-split-damage-btn`.trim();
         splitBtn.setAttribute("data-action", "split-spell-damage");
-        splitBtn.innerHTML = `<i class="fa-solid fa-dice-d6"></i> Split Dice Damage`;
-        splitBtn.title = "Roll damage replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, min d4)";
-        splitBtn.style.marginTop = "4px";
+        splitBtn.innerHTML = `<i class="${iconClass}"></i> ${actionLabel}`;
+        splitBtn.title = "Roll replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, min d4)";
 
         // Handle click event
         splitBtn.addEventListener("click", async (event) => {
@@ -132,10 +201,16 @@ export function registerSplitDamageCardButtons() {
             // Overlay IDs if applicable (e.g. modal options or variant choices)
             const overlayIds = message.flags?.pf2e?.casting?.overlayIds;
 
-            // Temporarily intercept getDamage during spell.rollDamage to modify the formulas cleanly
-            const originalGetDamage = spell.getDamage.bind(spell);
             try {
-                spell.getDamage = function(params) {
+                // Clone the spell with converted system damage and heightening data
+                const spellSource = foundry.utils.deepClone(spell._source ?? spell.toObject());
+                convertSpellSystemData(spellSource.system);
+
+                const tempSpell = spell.clone(spellSource, { keepId: true });
+
+                // Also wrap tempSpell.getDamage as a safety net for instances/synthetics
+                const originalGetDamage = tempSpell.getDamage.bind(tempSpell);
+                tempSpell.getDamage = function(params) {
                     const damage = originalGetDamage(params);
                     if (damage) {
                         transformDamageObject(damage);
@@ -143,8 +218,8 @@ export function registerSplitDamageCardButtons() {
                     return damage;
                 };
 
-                // Execute the native PF2e damage roll with all context preserved
-                await spell.rollDamage({
+                // Execute the native PF2e damage roll with all context and heightening preserved
+                await tempSpell.rollDamage({
                     event,
                     castLevel,
                     overlayIds
@@ -152,13 +227,10 @@ export function registerSplitDamageCardButtons() {
             } catch (err) {
                 console.error("PF2e Awesome Variant Rules | Error rolling split spell damage:", err);
                 ui.notifications.error("Failed to roll split spell damage. See console for details.");
-            } finally {
-                // Restore original method
-                spell.getDamage = originalGetDamage;
             }
         });
 
-        // Insert the button directly after the original damage button
-        damageBtn.insertAdjacentElement("afterend", splitBtn);
+        // Insert the button directly after the original damage/healing button
+        actionBtn.insertAdjacentElement("afterend", splitBtn);
     });
 }
