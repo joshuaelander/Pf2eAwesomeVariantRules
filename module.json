@@ -1,0 +1,57 @@
+{
+  "id": "pf2e-awesome-variant-rules",
+  "title": "PF2e Awesome Variant Rules",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14"
+  },
+  "url": "https://github.com/joshuaelander/Pf2eAwesomeVariantRules",
+  "manifest": "https://raw.githubusercontent.com/joshuaelander/Pf2eAwesomeVariantRules/main/module.json",
+  "download": "https://github.com/joshuaelander/Pf2eAwesomeVariantRules/archive/refs/heads/main.zip",
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "packs": [
+    {
+      "name": "pf2e-awesome-variant-rules-general-feats",
+      "label": "PF2e Awesome Variant Rules - General Feats",
+      "path": "packs/pf2e-awesome-variant-rules-general-feats",
+      "type": "Item",
+      "system": "pf2e",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "pf2e-awesome-variant-rules-general-feats",
+      "label": "PF2e Awesome Variant Rules - General Feats",
+      "path": "packs/pf2e-awesome-variant-rules-general-feats",
+      "type": "Item",
+      "system": "pf2e",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    }
+  ],
+  "authors": [
+    {
+      "name": "Aeneas"
+    }
+  ],
+  "description": "Various Awesome Variant Rules for PF2e to make the game more interesting and dynamic, including Quick Crafting and Quick Study (Learn a Spell).",
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {}
+      }
+    ]
+  },
+  "flags": {
+    "canUpload": true
+  }
+}
