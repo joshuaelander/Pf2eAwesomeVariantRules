@@ -7,7 +7,7 @@ Contents:
 3. Enhanced Recall Knowledge (Requires PF2eAwesomeMacrosForPlayers)
 4. Improved Crafting (Done)
 5. Improved Learn-a-Spell (Done)
-6. Alternate Spell Damage / Healing Calculation (TBD)
+6. Alternate Spell Damage / Healing Calculation (Done - Split Dice Variant)
 7. Improved Hero Points (Requires Pf2eImprovedHeroPoints)
 8. Improved Wounded Recovery (Requires Pf2eImprovedHeroPoints)
 9. Half Price Consumables (TBD)

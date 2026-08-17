@@ -8,12 +8,14 @@
 // --- 1. CONFIGURATION AND IMPORT MACRO LOGIC FILES ---
 const MODULE_ID = "pf2e-awesome-variant-rules";
 const MACRO_FOLDER_NAME = "PF2e Awesome Variant Rules";
-const MACRO_FOLDER_COLOR = "#5549fd"; // Blue color for the macro folder
+const MACRO_FOLDER_COLOR = "#b136b1ff"; // Pink color for the macro folder
 
 // Import the core functions and constants for the macros
 import { executeQuickCrafting, QUICK_CRAFTING_MACRO_NAME, QUICK_CRAFTING_MACRO_ICON } from './quick-crafting.js';
 import { executeQuickStudy, QUICK_STUDY_MACRO_NAME, QUICK_STUDY_MACRO_ICON } from './quick-study.js';
 import { registerSplitDamageCardButtons, convertSpellDiceFormula } from './split-spell-damage.js';
+import { registerSplitHealingCardButtons, convertHealingDiceFormula, rollSplitHealingFormula } from './split-healing.js';
+import { convertDiceFormula } from './dice-utils.js';
 
 // --- 2. THE DESIRED MACRO STATE ---
 // Add any new macros to this array. The Smart Sync will handle the rest!
@@ -119,6 +121,15 @@ Hooks.once('init', () => {
         type: Boolean,
         default: true
     });
+
+    game.settings.register(MODULE_ID, "splitHealingEnabled", {
+        name: "Enable Split Healing & Recovery Dice",
+        hint: "Adds an alternative 'Split Dice Healing' button on healing spells, impulses, and Treat Wounds to replace dice with twice as many half-sized dice (minimum d3).",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true
+    });
 });
 
 Hooks.once('ready', async () => {
@@ -130,10 +141,14 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.quickCrafting = executeQuickCrafting;
     game.pf2eAwesomeVariantRules.executeQuickStudy = executeQuickStudy;
     game.pf2eAwesomeVariantRules.quickStudy = executeQuickStudy;
+    game.pf2eAwesomeVariantRules.convertDiceFormula = convertDiceFormula;
     game.pf2eAwesomeVariantRules.convertSpellDiceFormula = convertSpellDiceFormula;
+    game.pf2eAwesomeVariantRules.convertHealingDiceFormula = convertHealingDiceFormula;
+    game.pf2eAwesomeVariantRules.rollSplitHealingFormula = rollSplitHealingFormula;
 
-    // Initialize Split Spell Damage chat card buttons
+    // Initialize Chat Card Buttons
     registerSplitDamageCardButtons();
+    registerSplitHealingCardButtons();
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";
