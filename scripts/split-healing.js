@@ -41,6 +41,9 @@ export function registerSplitHealingCardButtons() {
         const isEnabled = game.settings.get(MODULE_ID, "splitHealingEnabled");
         if (!isEnabled) return;
 
+        // NEW FIX: Prevent adding buttons to the actual dice roll result cards!
+        if (message.isRoll || (message.rolls && message.rolls.length > 0)) return;
+
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
@@ -64,7 +67,8 @@ export function registerSplitHealingCardButtons() {
             }
         }
 
-        injectTreatWoundsHealingButton(root, message);
+        // Handles Treat Wounds, Consumables, and Feats (like Ocean's Balm)
+        injectInlineHealingButton(root, message);
     });
 }
 
@@ -73,7 +77,9 @@ function injectSpellHealingButton(healingBtn, message) {
     splitBtn.type = "button";
     splitBtn.className = `${healingBtn.className} pf2e-split-healing-btn`.trim();
     splitBtn.setAttribute("data-action", healingBtn.getAttribute("data-action"));
-    splitBtn.innerHTML = `<i class="fa-solid fa-heart-pulse"></i> Split Dice Healing`;
+
+    // UNIFIED AESTHETIC
+    splitBtn.innerHTML = `Split Dice`;
     splitBtn.title = "Roll healing replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, 1d6 \u2192 2d3, min d3)";
 
     splitBtn.addEventListener("click", async (event) => {
@@ -119,7 +125,6 @@ function injectSpellHealingButton(healingBtn, message) {
         try {
             const options = [...(message.flags?.pf2e?.context?.options ?? [])];
 
-            // Action detection fallback
             const is1Action = options.includes("item:cast:actions:1");
             const is3Action = options.includes("item:cast:actions:3");
             const is2Action = !is1Action && !is3Action;
@@ -131,7 +136,6 @@ function injectSpellHealingButton(healingBtn, message) {
             const spellSource = foundry.utils.deepClone(spell.toObject());
             convertItemSystemData(spellSource.system, { minFace: MIN_HEALING_FACE });
 
-            // HARDCODE: Inject the 2-Action modifier directly into the base formula string
             if (spell.name === "Heal" && is2Action) {
                 const bonus = 8 * castLevel;
                 if (spellSource.system.damage && typeof spellSource.system.damage === "object") {
@@ -168,7 +172,9 @@ function injectImpulseHealingButton(actionBtn, message) {
     splitBtn.type = "button";
     splitBtn.className = `${actionBtn.className} pf2e-split-healing-btn`.trim();
     splitBtn.setAttribute("data-action", actionBtn.getAttribute("data-action"));
-    splitBtn.innerHTML = `<i class="fa-solid fa-seedling"></i> Split Dice Impulse`;
+
+    // UNIFIED AESTHETIC
+    splitBtn.innerHTML = `Split Dice`;
     splitBtn.title = "Roll impulse replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, 1d6 \u2192 2d3, min d3)";
 
     splitBtn.addEventListener("click", async (event) => {
@@ -205,73 +211,107 @@ function injectImpulseHealingButton(actionBtn, message) {
     actionBtn.insertAdjacentElement("afterend", splitBtn);
 }
 
-function injectTreatWoundsHealingButton(root, message) {
-    if (root.querySelector('.pf2e-split-healing-btn[data-action="split-treat-wounds"]')) return;
+/**
+ * Dynamically handles Treat Wounds, Consumables (Potions/Elixirs), and Feats (Ocean's Balm)
+ */
+function injectInlineHealingButton(root, message) {
+    if (root.querySelector('.pf2e-split-healing-btn[data-action="split-inline-healing"]')) return;
 
     const context = message.flags?.pf2e?.context;
+    const options = context?.options ?? [];
+    const itemUuid = message.flags?.pf2e?.origin?.uuid;
+    const item = message.item || (itemUuid ? fromUuidSync(itemUuid) : null);
+
+    const text = root.textContent || "";
+    const flavor = message.flavor || "";
+    const combinedText = (text + " " + flavor + " " + (item?.name || "")).toLowerCase();
+
+    // 1. Broad Trait & Keyword Detection
     const isTreatWounds = context?.action === "treat-wounds"
         || context?.action === "battle-medicine"
-        || message.flavor?.toLowerCase().includes("treat wounds")
-        || message.flavor?.toLowerCase().includes("battle medicine")
-        || root.textContent?.includes("Treat Wounds")
-        || root.textContent?.includes("Battle Medicine");
+        || combinedText.includes("treat wounds")
+        || combinedText.includes("battle medicine");
 
-    const item = message.item;
-    const isHealingConsumable = item?.type === "consumable" &&
-        (item.system.traits?.value?.includes("healing") || item.system.consumableType?.value === "potion" || item.system.consumableType?.value === "elixir");
+    const hasHealingOptions = options.some(o =>
+        o.includes("item:trait:healing") ||
+        o.includes("item:trait:potion") ||
+        o.includes("item:trait:elixir") ||
+        o.includes("item:oceans-balm")
+    );
 
-    if (!isTreatWounds && !isHealingConsumable) return;
+    const isHealingItemOrFeat = hasHealingOptions
+        || combinedText.includes("potion")
+        || combinedText.includes("elixir")
+        || combinedText.includes("ocean's balm")
+        || item?.system?.traits?.value?.includes("healing")
+        || item?.system?.traits?.value?.includes("potion")
+        || item?.system?.traits?.value?.includes("elixir");
 
-    const inlineDamageLinks = root.querySelectorAll('a.inline-roll, span[data-damage-formula], span.damage-roll, button[data-action="treat-wounds-healing"]');
-
+    // 2. Extract the Formula
     let matchedFormula = null;
-    if (inlineDamageLinks.length > 0) {
-        for (const el of inlineDamageLinks) {
-            const formula = el.getAttribute("data-formula") || el.getAttribute("data-damage-formula") || el.textContent.trim();
-            if (formula && /(\d+)?d\d+/i.test(formula)) {
-                matchedFormula = formula;
-                break;
+    let hasHealingTagInFormula = false;
+
+    const inlineElements = root.querySelectorAll('[data-damage-formula], [data-formula], .inline-roll, .damage-roll, button[data-action="treat-wounds-healing"]');
+
+    for (const el of inlineElements) {
+        const formula = el.dataset?.formula || el.dataset?.damageFormula || el.getAttribute("data-formula") || el.textContent.trim();
+        if (formula && /\d+d\d+/i.test(formula)) {
+            matchedFormula = formula;
+            if (formula.toLowerCase().includes("[healing]") || formula.toLowerCase().includes("[vitality]")) {
+                hasHealingTagInFormula = true;
             }
+            break;
         }
     }
 
-    if (!matchedFormula) {
-        const text = root.textContent || "";
-        const isCrit = text.includes("Critical Success") || context?.outcome === "criticalSuccess";
-        const isSuccess = text.includes("Success") || context?.outcome === "success";
+    if (!matchedFormula && isTreatWounds) {
+        const isCrit = combinedText.includes("critical success") || context?.outcome === "criticalSuccess";
+        const isSuccess = combinedText.includes("success") || context?.outcome === "success";
 
         if (isCrit) {
-            if (text.includes("+ 50") || text.includes("+50")) matchedFormula = "4d8 + 50";
-            else if (text.includes("+ 30") || text.includes("+30")) matchedFormula = "4d8 + 30";
-            else if (text.includes("+ 10") || text.includes("+10")) matchedFormula = "4d8 + 10";
+            if (combinedText.includes("+ 50") || combinedText.includes("+50")) matchedFormula = "4d8 + 50";
+            else if (combinedText.includes("+ 30") || combinedText.includes("+30")) matchedFormula = "4d8 + 30";
+            else if (combinedText.includes("+ 10") || combinedText.includes("+10")) matchedFormula = "4d8 + 10";
             else matchedFormula = "4d8";
         } else if (isSuccess) {
-            if (text.includes("+ 50") || text.includes("+50")) matchedFormula = "2d8 + 50";
-            else if (text.includes("+ 30") || text.includes("+30")) matchedFormula = "2d8 + 30";
-            else if (text.includes("+ 10") || text.includes("+10")) matchedFormula = "2d8 + 10";
+            if (combinedText.includes("+ 50") || combinedText.includes("+50")) matchedFormula = "2d8 + 50";
+            else if (combinedText.includes("+ 30") || combinedText.includes("+30")) matchedFormula = "2d8 + 30";
+            else if (combinedText.includes("+ 10") || combinedText.includes("+10")) matchedFormula = "2d8 + 10";
             else matchedFormula = "2d8";
         }
     }
 
+    // 3. Final Gatekeeper Check
     if (!matchedFormula) return;
+    if (item?.type === "spell") return;
+    if (!isTreatWounds && !isHealingItemOrFeat && !hasHealingTagInFormula) return;
+
+    // 4. Inject the Button (Unified Aesthetic)
+    let flavorText = "Treat Wounds / Recovery (Split Dice)";
+
+    if (!isTreatWounds) {
+        const sourceName = item?.name || "Item";
+        flavorText = `${sourceName} (Split Dice)`;
+    }
 
     const targetContainer = root.querySelector('.card-buttons, footer, .message-content') ?? root;
-
     const splitBtn = document.createElement("button");
     splitBtn.type = "button";
     splitBtn.className = "pf2e-split-healing-btn";
-    splitBtn.setAttribute("data-action", "split-treat-wounds");
+    splitBtn.setAttribute("data-action", "split-inline-healing");
     splitBtn.style.marginTop = "6px";
     splitBtn.style.width = "100%";
-    splitBtn.innerHTML = `<i class="fa-solid fa-notes-medical"></i> Split Treat Wounds`;
-    splitBtn.title = `Roll Treat Wounds with split dice (${matchedFormula} \u2192 ${convertHealingDiceFormula(matchedFormula)})`;
+
+    // UNIFIED AESTHETIC
+    splitBtn.innerHTML = `Split Dice`;
+    splitBtn.title = `Roll with split dice (${matchedFormula} \u2192 ${convertHealingDiceFormula(matchedFormula)})`;
 
     splitBtn.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
         await rollSplitHealingFormula(matchedFormula, {
             actor: message.actor,
-            flavor: "Treat Wounds / Recovery (Split Dice)"
+            flavor: flavorText
         });
     });
 

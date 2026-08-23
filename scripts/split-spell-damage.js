@@ -20,6 +20,9 @@ export function registerSplitDamageCardButtons() {
         const isEnabled = game.settings.get(MODULE_ID, "splitSpellDamageEnabled");
         if (!isEnabled) return;
 
+        // NEW FIX: Prevent adding buttons to the actual dice roll result cards!
+        if (message.isRoll || (message.rolls && message.rolls.length > 0)) return;
+
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
@@ -37,7 +40,9 @@ function injectSpellDamageButton(damageBtn, message) {
     splitBtn.type = "button";
     splitBtn.className = `${damageBtn.className} pf2e-split-damage-btn`.trim();
     splitBtn.setAttribute("data-action", "split-spell-damage");
-    splitBtn.innerHTML = `<i class="fa-solid fa-dice-d6"></i> Split Dice Damage`;
+
+    // UNIFIED AESTHETIC
+    splitBtn.innerHTML = `Split Dice`;
     splitBtn.title = "Roll damage replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, min d4)";
 
     splitBtn.addEventListener("click", async (event) => {
