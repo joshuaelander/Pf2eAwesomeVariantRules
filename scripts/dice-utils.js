@@ -166,17 +166,22 @@ export function transformDamageObject(damage, { minFace = 4 } = {}) {
  * - 'damage': Damage spells (e.g. Fireball, Electric Arc, Force Barrage, Sudden Bolt).
  * 
  * @param {object} spell - PF2e Spell item instance
+ * @param {string} [nameHint=""] - Optional name string if spell object is not yet loaded
  * @returns {'healing'|'damage'|'both'}
  */
-export function getSpellCategory(spell) {
-    if (!spell) return 'damage';
-
-    const name = spell.name?.trim() || "";
+export function getSpellCategory(spell, nameHint = "") {
+    const name = (spell?.name || nameHint || "").trim();
 
     // Dual-nature modal spells
-    if (["Heal", "Harm"].includes(name)) {
+    if (["Heal", "Harm"].includes(name) || name.toLowerCase().startsWith("heal") || name.toLowerCase().startsWith("harm")) {
         return 'both';
     }
+
+    if (name.toLowerCase().includes("soothe") || name.toLowerCase().includes("goodberry") || name.toLowerCase().includes("healing plaster") || name.toLowerCase().includes("life conduit")) {
+        return 'healing';
+    }
+
+    if (!spell) return 'damage';
 
     // Extract traits
     const traits = new Set();
@@ -246,63 +251,69 @@ export function isHealingEffect({ item = null, message = null, text = "" } = {})
     const context = message?.flags?.pf2e?.context;
     const action = context?.action || "";
     const options = context?.options || [];
+    const lowerText = String(text || "").toLowerCase();
 
-    // 1. Skill Actions
+    // 1. Keyword check in text or formulas
+    if (
+        lowerText.includes("heal") ||
+        lowerText.includes("vitality") ||
+        lowerText.includes("recovery") ||
+        lowerText.includes("treat wounds") ||
+        lowerText.includes("battle medicine") ||
+        lowerText.includes("regain") ||
+        lowerText.includes("restore") ||
+        lowerText.includes("potion") ||
+        lowerText.includes("elixir") ||
+        lowerText.includes("balm") ||
+        lowerText.includes("produce") ||
+        lowerText.includes("tonic") ||
+        lowerText.includes("hit point") ||
+        lowerText.includes("hp")
+    ) {
+        return true;
+    }
+
+    // 2. Skill Actions
     if (["treat-wounds", "battle-medicine", "administer-first-aid"].includes(action)) {
         return true;
     }
 
-    // 2. Message context options
+    // 3. Message context options
     if (options.some(o => typeof o === "string" && (
-        o.includes("item:trait:healing") ||
-        o.includes("item:trait:potion") ||
-        o.includes("item:trait:elixir") ||
-        o.includes("item:trait:vitality") ||
-        o.includes("action:treat-wounds") ||
-        o.includes("action:battle-medicine") ||
+        o.includes("healing") ||
+        o.includes("potion") ||
+        o.includes("elixir") ||
+        o.includes("vitality") ||
+        o.includes("treat-wounds") ||
+        o.includes("battle-medicine") ||
         o.includes("oceans-balm") ||
         o.includes("fresh-produce")
     ))) {
         return true;
     }
 
-    // 3. Item Traits & Types
+    // 4. Item Traits & Types
     if (item) {
         const traits = [];
         const rawTraits = item.traits?.value ?? item.system?.traits?.value ?? item.traits;
         if (Array.isArray(rawTraits)) traits.push(...rawTraits.map(t => String(t).toLowerCase()));
         else if (rawTraits instanceof Set) traits.push(...Array.from(rawTraits).map(t => String(t).toLowerCase()));
 
-        if (traits.some(t => ["healing", "potion", "elixir", "vitality"].includes(t))) {
+        if (traits.some(t => ["healing", "potion", "elixir", "vitality", "positive"].includes(t))) {
             return true;
         }
 
-        // Impulses that heal
         if (traits.includes("impulse")) {
             const itemName = String(item.name || "").toLowerCase();
             if (traits.includes("healing") || itemName.includes("balm") || itemName.includes("produce") || itemName.includes("herb")) {
                 return true;
             }
         }
-    }
 
-    // 4. Text & Keywords
-    const lowerText = String(text || "").toLowerCase();
-    if (
-        lowerText.includes("treat wounds") ||
-        lowerText.includes("battle medicine") ||
-        lowerText.includes("ocean's balm") ||
-        lowerText.includes("fresh produce") ||
-        lowerText.includes("potion of healing") ||
-        lowerText.includes("healing potion") ||
-        lowerText.includes("elixir of life") ||
-        lowerText.includes("soothing tonic") ||
-        lowerText.includes("[healing]") ||
-        lowerText.includes("[vitality]") ||
-        lowerText.includes("regains") ||
-        lowerText.includes("restores")
-    ) {
-        return true;
+        const name = String(item.name || "").toLowerCase();
+        if (name.includes("heal") || name.includes("potion") || name.includes("elixir") || name.includes("balm") || name.includes("life") || name.includes("produce")) {
+            return true;
+        }
     }
 
     return false;

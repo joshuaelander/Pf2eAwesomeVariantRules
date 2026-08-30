@@ -14,7 +14,7 @@ const MACRO_FOLDER_COLOR = "#b136b1ff"; // Pink color for the macro folder
 import { executeQuickCrafting, QUICK_CRAFTING_MACRO_NAME, QUICK_CRAFTING_MACRO_ICON } from './quick-crafting.js';
 import { executeQuickStudy, QUICK_STUDY_MACRO_NAME, QUICK_STUDY_MACRO_ICON } from './quick-study.js';
 import { registerSplitDamageCardButtons, convertSpellDiceFormula } from './split-spell-damage.js';
-import { registerSplitHealingCardButtons, convertHealingDiceFormula, rollSplitHealingFormula } from './split-healing.js';
+import { registerSplitHealingCardButtons, convertHealingDiceFormula, rollSplitHealingFormula, triggerNativeInlineDamageRoll, promptSplitHealingDialog } from './split-healing.js';
 import { convertDiceFormula } from './dice-utils.js';
 
 // --- 2. THE DESIRED MACRO STATE ---
@@ -145,6 +145,7 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.convertSpellDiceFormula = convertSpellDiceFormula;
     game.pf2eAwesomeVariantRules.convertHealingDiceFormula = convertHealingDiceFormula;
     game.pf2eAwesomeVariantRules.rollSplitHealingFormula = rollSplitHealingFormula;
+    game.pf2eAwesomeVariantRules.promptSplitHealingDialog = promptSplitHealingDialog;
 
     // Initialize Chat Card Buttons
     registerSplitDamageCardButtons();

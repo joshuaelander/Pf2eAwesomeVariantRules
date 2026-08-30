@@ -27,7 +27,7 @@ export function registerSplitDamageCardButtons() {
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
-        const damageBtns = root.querySelectorAll('button[data-action="spell-damage"], button[data-action="spellDamage"], button[data-action="spell-healing"], button[data-action="spellHealing"]');
+        const damageBtns = root.querySelectorAll('button[data-action="spell-damage"], button[data-action="spellDamage"], button[data-action="spell-healing"], button[data-action="spellHealing"], button[data-action="damage"]');
         for (const damageBtn of damageBtns) {
             if (damageBtn.nextElementSibling?.classList.contains('pf2e-split-damage-btn') ||
                 damageBtn.nextElementSibling?.classList.contains('pf2e-split-healing-btn')) {
@@ -36,9 +36,14 @@ export function registerSplitDamageCardButtons() {
 
             const itemUuid = message.flags?.pf2e?.origin?.uuid;
             let spell = itemUuid ? fromUuidSync(itemUuid) : message.item;
+            const headerTitle = root.querySelector('.card-header h3, .card-header h4, h3')?.textContent?.trim() || "";
+
+            // Only process if it's a spell card or item is a spell
+            const isSpell = (spell?.type === "spell") || message.flags?.pf2e?.origin?.type === "spell" || message.flags?.pf2e?.casting || damageBtn.hasAttribute("data-cast-level");
+            if (!isSpell && spell && spell.type !== "spell") continue;
 
             // Classify spell and verify relevant setting
-            const category = getSpellCategory(spell);
+            const category = getSpellCategory(spell, headerTitle);
             const damageEnabled = Boolean(game.settings.get(MODULE_ID, "splitSpellDamageEnabled"));
             const healingEnabled = Boolean(game.settings.get(MODULE_ID, "splitHealingEnabled"));
 
