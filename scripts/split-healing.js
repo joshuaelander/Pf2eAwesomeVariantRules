@@ -7,7 +7,7 @@
  * down to a minimum resulting die size of d3.
  */
 
-import { convertDiceFormula, convertItemSystemData, transformDamageObject } from './dice-utils.js';
+import { convertDiceFormula, isHealingEffect } from './dice-utils.js';
 
 const MODULE_ID = "pf2e-awesome-variant-rules";
 const MIN_HEALING_FACE = 3;
@@ -16,23 +16,36 @@ export function convertHealingDiceFormula(formula) {
     return convertDiceFormula(formula, { minFace: MIN_HEALING_FACE });
 }
 
-export async function rollSplitHealingFormula(formula, { actor = null, flavor = "Split Dice Healing" } = {}) {
+export async function rollSplitHealingFormula(formula, { actor = null, flavor = "Split Dice Healing", item = null } = {}) {
     const splitFormula = convertHealingDiceFormula(formula);
     const DamageRoll = CONFIG.Dice.rolls.find(r => r.name === "DamageRoll") ?? CONFIG.Dice.DamageRoll ?? Roll;
 
+    // Clean formula and ensure healing bracket tag for PF2e DamageRoll
+    let rollFormula = splitFormula.trim();
+    if (!rollFormula.includes("[")) {
+        rollFormula = `(${splitFormula})[healing]`;
+    }
+
+    // Build the message data, tying it back to the source item's UUID so UI displays its icon & traits
+    const messageData = {
+        speaker: ChatMessage.getSpeaker({ actor }),
+        flavor: `<strong>${flavor}</strong> (${splitFormula})`,
+        flags: {
+            pf2e: {
+                origin: item ? { uuid: item.uuid, type: item.type } : null
+            }
+        }
+    };
+
     try {
-        const roll = new DamageRoll(`(${splitFormula})[healing,vitality]`);
-        await roll.toMessage({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            flavor: `<strong>${flavor}</strong> (${splitFormula})`
-        });
-    } catch {
+        const roll = new DamageRoll(rollFormula);
+        await roll.evaluate();
+        await roll.toMessage(messageData);
+    } catch (err) {
+        console.warn("PF2e Awesome Variant Rules | DamageRoll evaluation failed, falling back to standard Roll:", err);
         const roll = new Roll(splitFormula);
         await roll.evaluate();
-        await roll.toMessage({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            flavor: `<strong>${flavor}</strong> (${splitFormula})`
-        });
+        await roll.toMessage(messageData);
     }
 }
 
@@ -41,232 +54,69 @@ export function registerSplitHealingCardButtons() {
         const isEnabled = game.settings.get(MODULE_ID, "splitHealingEnabled");
         if (!isEnabled) return;
 
-        // NEW FIX: Prevent adding buttons to the actual dice roll result cards!
+        // Prevent adding buttons to actual dice roll result cards
         if (message.isRoll || (message.rolls && message.rolls.length > 0)) return;
 
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
-        const spellHealingBtns = root.querySelectorAll('button[data-action="spell-healing"], button[data-action="spellHealing"]');
-        for (const btn of spellHealingBtns) {
-            if (!btn.nextElementSibling?.classList.contains('pf2e-split-healing-btn')) {
-                injectSpellHealingButton(btn, message);
-            }
-        }
-
-        const impulseHealingBtns = root.querySelectorAll([
-            'button[data-action="heal"]',
-            'button[data-action="healing"]',
-            'button[data-action="impulse-healing"]',
-            'button[data-action="impulse-damage"]'
-        ].join(", "));
-
-        for (const btn of impulseHealingBtns) {
-            if (!btn.nextElementSibling?.classList.contains('pf2e-split-healing-btn')) {
-                injectImpulseHealingButton(btn, message);
-            }
-        }
-
-        // Handles Treat Wounds, Consumables, and Feats (like Ocean's Balm)
+        // Handles Impulses (Ocean's Balm, Fresh Produce), Consumables (Potions, Elixirs), Treat Wounds, and Feats
         injectInlineHealingButton(root, message);
     });
 }
 
-function injectSpellHealingButton(healingBtn, message) {
-    const splitBtn = document.createElement("button");
-    splitBtn.type = "button";
-    splitBtn.className = `${healingBtn.className} pf2e-split-healing-btn`.trim();
-    splitBtn.setAttribute("data-action", healingBtn.getAttribute("data-action"));
-
-    // UNIFIED AESTHETIC
-    splitBtn.innerHTML = `Split Dice`;
-    splitBtn.title = "Roll healing replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, 1d6 \u2192 2d3, min d3)";
-
-    splitBtn.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const itemUuid = message.flags?.pf2e?.origin?.uuid;
-        let spell = itemUuid ? fromUuidSync(itemUuid) : message.item;
-
-        if (!spell) {
-            ui.notifications.warn("PF2e Awesome Variant Rules | Could not find source spell for this roll.");
-            return;
-        }
-
-        const castLevelAttr = healingBtn.getAttribute("data-cast-level") ?? healingBtn.dataset.castLevel;
-        const castLevel = castLevelAttr ? parseInt(castLevelAttr, 10) : (
-            message.flags?.pf2e?.casting?.castLevel
-            ?? message.flags?.pf2e?.context?.castLevel
-            ?? spell.rank
-            ?? spell.level
-        );
-
-        const overlayIdsAttr = healingBtn.getAttribute("data-overlay-ids")
-            ?? healingBtn.getAttribute("data-overlay-id")
-            ?? healingBtn.dataset.overlayIds;
-
-        let overlayIds = overlayIdsAttr ? overlayIdsAttr.split(",").map(s => s.trim()).filter(Boolean) : undefined;
-
-        if (!overlayIds || overlayIds.length === 0) {
-            overlayIds = message.flags?.pf2e?.casting?.overlayIds
-                ?? message.flags?.pf2e?.context?.overlayIds
-                ?? message.flags?.pf2e?.origin?.variant?.overlayIds;
-        }
-
-        if (Array.isArray(overlayIds)) {
-            overlayIds = overlayIds.filter(id => typeof id === "string");
-        }
-
-        if (typeof spell.loadVariant === "function" && overlayIds && overlayIds.length > 0) {
-            spell = spell.loadVariant({ overlayIds }) ?? spell;
-        }
-
-        try {
-            const options = [...(message.flags?.pf2e?.context?.options ?? [])];
-
-            const is1Action = options.includes("item:cast:actions:1");
-            const is3Action = options.includes("item:cast:actions:3");
-            const is2Action = !is1Action && !is3Action;
-
-            if (is2Action && !options.includes("item:cast:actions:2")) {
-                options.push("item:cast:actions:2");
-            }
-
-            const spellSource = foundry.utils.deepClone(spell.toObject());
-            convertItemSystemData(spellSource.system, { minFace: MIN_HEALING_FACE });
-
-            if (spell.name === "Heal" && is2Action) {
-                const bonus = 8 * castLevel;
-                if (spellSource.system.damage && typeof spellSource.system.damage === "object") {
-                    const firstKey = Object.keys(spellSource.system.damage)[0];
-                    if (firstKey && spellSource.system.damage[firstKey].formula) {
-                        spellSource.system.damage[firstKey].formula += ` + ${bonus}`;
-                    }
-                }
-            }
-
-            const tempSpell = spell.clone(spellSource, { keepId: true });
-
-            const originalGetDamage = tempSpell.getDamage.bind(tempSpell);
-            tempSpell.getDamage = function (params) {
-                const damage = originalGetDamage(params);
-                if (damage) {
-                    transformDamageObject(damage, { minFace: MIN_HEALING_FACE });
-                }
-                return damage;
-            };
-
-            await tempSpell.rollDamage({ event, castLevel, overlayIds, options });
-        } catch (err) {
-            console.error("PF2e Awesome Variant Rules | Error rolling split dice:", err);
-            ui.notifications.error("Failed to roll split dice. See console for details.");
-        }
-    });
-
-    healingBtn.insertAdjacentElement("afterend", splitBtn);
-}
-
-function injectImpulseHealingButton(actionBtn, message) {
-    const splitBtn = document.createElement("button");
-    splitBtn.type = "button";
-    splitBtn.className = `${actionBtn.className} pf2e-split-healing-btn`.trim();
-    splitBtn.setAttribute("data-action", actionBtn.getAttribute("data-action"));
-
-    // UNIFIED AESTHETIC
-    splitBtn.innerHTML = `Split Dice`;
-    splitBtn.title = "Roll impulse replacing dice with twice as many half-sized dice (e.g. 1d8 \u2192 2d4, 1d6 \u2192 2d3, min d3)";
-
-    splitBtn.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const itemUuid = message.flags?.pf2e?.origin?.uuid;
-        let item = itemUuid ? fromUuidSync(itemUuid) : message.item;
-
-        if (!item) {
-            ui.notifications.warn("PF2e Awesome Variant Rules | Could not find source impulse/action for this roll.");
-            return;
-        }
-
-        try {
-            const itemSource = foundry.utils.deepClone(item._source ?? item.toObject());
-            convertItemSystemData(itemSource.system, { minFace: MIN_HEALING_FACE });
-
-            const tempItem = item.clone(itemSource, { keepId: true });
-
-            if (typeof tempItem.rollDamage === "function") {
-                await tempItem.rollDamage({ event });
-            } else if (typeof tempItem.rollHealing === "function") {
-                await tempItem.rollHealing({ event });
-            } else if (typeof tempItem.roll === "function") {
-                await tempItem.roll({ event });
-            }
-        } catch (err) {
-            console.error("PF2e Awesome Variant Rules | Error rolling split impulse:", err);
-            ui.notifications.error("Failed to roll split impulse. See console for details.");
-        }
-    });
-
-    actionBtn.insertAdjacentElement("afterend", splitBtn);
-}
-
 /**
- * Dynamically handles Treat Wounds, Consumables (Potions/Elixirs), and Feats (Ocean's Balm)
+ * Dynamically handles Impulses (Ocean's Balm, Fresh Produce), Consumables (Potions/Elixirs),
+ * Treat Wounds, Battle Medicine, and Feats.
  */
 function injectInlineHealingButton(root, message) {
-    if (root.querySelector('.pf2e-split-healing-btn[data-action="split-inline-healing"]')) return;
+    if (root.querySelector('.pf2e-split-healing-btn')) return;
 
     const context = message.flags?.pf2e?.context;
-    const options = context?.options ?? [];
     const itemUuid = message.flags?.pf2e?.origin?.uuid;
     const item = message.item || (itemUuid ? fromUuidSync(itemUuid) : null);
 
+    // Spells are handled via the unified spell dice button injector in split-spell-damage.js
+    if (item?.type === "spell") return;
+
     const text = root.textContent || "";
     const flavor = message.flavor || "";
-    const combinedText = (text + " " + flavor + " " + (item?.name || "")).toLowerCase();
+    const combinedText = `${text} ${flavor} ${item?.name || ""}`;
 
-    // 1. Broad Trait & Keyword Detection
-    const isTreatWounds = context?.action === "treat-wounds"
-        || context?.action === "battle-medicine"
-        || combinedText.includes("treat wounds")
-        || combinedText.includes("battle medicine");
+    // 1. Verify this card represents a healing/recovery effect
+    const isHealing = isHealingEffect({ item, message, text: combinedText });
 
-    const hasHealingOptions = options.some(o =>
-        o.includes("item:trait:healing") ||
-        o.includes("item:trait:potion") ||
-        o.includes("item:trait:elixir") ||
-        o.includes("item:oceans-balm")
-    );
-
-    const isHealingItemOrFeat = hasHealingOptions
-        || combinedText.includes("potion")
-        || combinedText.includes("elixir")
-        || combinedText.includes("ocean's balm")
-        || item?.system?.traits?.value?.includes("healing")
-        || item?.system?.traits?.value?.includes("potion")
-        || item?.system?.traits?.value?.includes("elixir");
-
-    // 2. Extract the Formula
+    // 2. Extract the Formula from inline rolls or text
     let matchedFormula = null;
-    let hasHealingTagInFormula = false;
 
-    const inlineElements = root.querySelectorAll('[data-damage-formula], [data-formula], .inline-roll, .damage-roll, button[data-action="treat-wounds-healing"]');
+    const inlineElements = root.querySelectorAll([
+        '[data-damage-formula]',
+        '[data-formula]',
+        '.inline-roll',
+        '.damage-roll',
+        'a.inline-roll',
+        'button[data-action="treat-wounds-healing"]'
+    ].join(', '));
 
     for (const el of inlineElements) {
-        const formula = el.dataset?.formula || el.dataset?.damageFormula || el.getAttribute("data-formula") || el.textContent.trim();
-        if (formula && /\d+d\d+/i.test(formula)) {
-            matchedFormula = formula;
-            if (formula.toLowerCase().includes("[healing]") || formula.toLowerCase().includes("[vitality]")) {
-                hasHealingTagInFormula = true;
-            }
+        const rawFormula = el.dataset?.damageFormula || el.dataset?.formula || el.getAttribute("data-damage-formula") || el.getAttribute("data-formula") || el.textContent.trim();
+        // Match standard dice formulas like 1d8, 2d8+5, 1d6[vitality], 3d6+6
+        const diceMatch = rawFormula.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)/i);
+        if (diceMatch) {
+            matchedFormula = diceMatch[1];
             break;
         }
     }
 
+    // Treat Wounds fallback formula calculation if not explicitly embedded as inline roll
+    const isTreatWounds = context?.action === "treat-wounds"
+        || context?.action === "battle-medicine"
+        || combinedText.toLowerCase().includes("treat wounds")
+        || combinedText.toLowerCase().includes("battle medicine");
+
     if (!matchedFormula && isTreatWounds) {
-        const isCrit = combinedText.includes("critical success") || context?.outcome === "criticalSuccess";
-        const isSuccess = combinedText.includes("success") || context?.outcome === "success";
+        const isCrit = combinedText.toLowerCase().includes("critical success") || context?.outcome === "criticalSuccess";
+        const isSuccess = combinedText.toLowerCase().includes("success") || context?.outcome === "success";
 
         if (isCrit) {
             if (combinedText.includes("+ 50") || combinedText.includes("+50")) matchedFormula = "4d8 + 50";
@@ -281,20 +131,21 @@ function injectInlineHealingButton(root, message) {
         }
     }
 
-    // 3. Final Gatekeeper Check
-    if (!matchedFormula) return;
-    if (item?.type === "spell") return;
-    if (!isTreatWounds && !isHealingItemOrFeat && !hasHealingTagInFormula) return;
+    // Gatekeeper: Must have a valid formula containing dice and be a recognized healing effect
+    if (!matchedFormula || !/\d+d\d+/i.test(matchedFormula)) return;
+    if (!isHealing && !isTreatWounds) return;
 
-    // 4. Inject the Button (Unified Aesthetic)
-    let flavorText = "Treat Wounds / Recovery (Split Dice)";
-
-    if (!isTreatWounds) {
-        const sourceName = item?.name || "Item";
-        flavorText = `${sourceName} (Split Dice)`;
+    // 3. Construct Split Button
+    let flavorText = "Recovery (Split Dice)";
+    if (isTreatWounds) {
+        flavorText = "Treat Wounds / Recovery (Split Dice)";
+    } else if (item?.name) {
+        flavorText = `${item.name} (Split Dice)`;
     }
 
+    const convertedFormula = convertHealingDiceFormula(matchedFormula);
     const targetContainer = root.querySelector('.card-buttons, footer, .message-content') ?? root;
+
     const splitBtn = document.createElement("button");
     splitBtn.type = "button";
     splitBtn.className = "pf2e-split-healing-btn";
@@ -304,14 +155,15 @@ function injectInlineHealingButton(root, message) {
 
     // UNIFIED AESTHETIC
     splitBtn.innerHTML = `Split Dice`;
-    splitBtn.title = `Roll with split dice (${matchedFormula} \u2192 ${convertHealingDiceFormula(matchedFormula)})`;
+    splitBtn.title = `Roll with split dice (${matchedFormula} \u2192 ${convertedFormula}, min d3)`;
 
     splitBtn.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
         await rollSplitHealingFormula(matchedFormula, {
             actor: message.actor,
-            flavor: flavorText
+            flavor: flavorText,
+            item: item
         });
     });
 

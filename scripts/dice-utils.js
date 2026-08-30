@@ -157,3 +157,153 @@ export function transformDamageObject(damage, { minFace = 4 } = {}) {
 
     return damage;
 }
+
+/**
+ * Classifies a spell as 'healing', 'damage', or 'both' (modal spells like Heal and Harm).
+ * 
+ * - 'healing': Pure healing spells (e.g. Soothe, Goodberry, Life Conduit, Healing Plaster, Restoration, Vital Beacon).
+ * - 'both': Modal / dual-nature spells (e.g. Heal [heals living, damages undead], Harm [damages living, heals undead]).
+ * - 'damage': Damage spells (e.g. Fireball, Electric Arc, Force Barrage, Sudden Bolt).
+ * 
+ * @param {object} spell - PF2e Spell item instance
+ * @returns {'healing'|'damage'|'both'}
+ */
+export function getSpellCategory(spell) {
+    if (!spell) return 'damage';
+
+    const name = spell.name?.trim() || "";
+
+    // Dual-nature modal spells
+    if (["Heal", "Harm"].includes(name)) {
+        return 'both';
+    }
+
+    // Extract traits
+    const traits = new Set();
+    const rawTraits = spell.traits?.value ?? spell.system?.traits?.value ?? spell.traits;
+    if (Array.isArray(rawTraits)) {
+        for (const t of rawTraits) traits.add(String(t).toLowerCase());
+    } else if (rawTraits instanceof Set) {
+        for (const t of rawTraits) traits.add(String(t).toLowerCase());
+    }
+
+    // Check damage kinds if available from PF2e system
+    const damageKinds = spell.damageKinds;
+    if (damageKinds instanceof Set || Array.isArray(damageKinds)) {
+        const kindsSet = new Set(Array.from(damageKinds));
+        if (kindsSet.has("healing") && kindsSet.has("damage")) {
+            return 'both';
+        }
+        if (kindsSet.has("healing") && !kindsSet.has("damage")) {
+            return 'healing';
+        }
+    }
+
+    // Check system damage entries
+    const damageEntries = Object.values(spell.system?.damage ?? {});
+    if (damageEntries.length > 0) {
+        let hasHealing = false;
+        let hasDamage = false;
+
+        for (const entry of damageEntries) {
+            if (!entry || typeof entry !== "object") continue;
+            const kinds = Array.isArray(entry.kinds) ? entry.kinds : (entry.kinds instanceof Set ? Array.from(entry.kinds) : []);
+            const type = String(entry.type || "").toLowerCase();
+            const category = String(entry.category || "").toLowerCase();
+
+            if (kinds.includes("healing") || type === "healing" || category === "healing") {
+                hasHealing = true;
+            }
+            if (kinds.includes("damage") || (type && !["healing", "vitality"].includes(type))) {
+                hasDamage = true;
+            }
+        }
+
+        if (hasHealing && hasDamage) return 'both';
+        if (hasHealing && !hasDamage) return 'healing';
+    }
+
+    // Check spell getter or traits
+    if (spell.isHealing || traits.has("healing")) {
+        return 'healing';
+    }
+
+    return 'damage';
+}
+
+/**
+ * Checks whether an item, message, or roll context represents a healing or recovery effect.
+ * Covers Kineticist impulses (Ocean's Balm, Fresh Produce), consumables (Potions, Elixirs),
+ * Treat Wounds, Battle Medicine, and other healing actions/feats.
+ * 
+ * @param {object} options
+ * @param {object} [options.item]
+ * @param {object} [options.message]
+ * @param {string} [options.text]
+ * @returns {boolean}
+ */
+export function isHealingEffect({ item = null, message = null, text = "" } = {}) {
+    const context = message?.flags?.pf2e?.context;
+    const action = context?.action || "";
+    const options = context?.options || [];
+
+    // 1. Skill Actions
+    if (["treat-wounds", "battle-medicine", "administer-first-aid"].includes(action)) {
+        return true;
+    }
+
+    // 2. Message context options
+    if (options.some(o => typeof o === "string" && (
+        o.includes("item:trait:healing") ||
+        o.includes("item:trait:potion") ||
+        o.includes("item:trait:elixir") ||
+        o.includes("item:trait:vitality") ||
+        o.includes("action:treat-wounds") ||
+        o.includes("action:battle-medicine") ||
+        o.includes("oceans-balm") ||
+        o.includes("fresh-produce")
+    ))) {
+        return true;
+    }
+
+    // 3. Item Traits & Types
+    if (item) {
+        const traits = [];
+        const rawTraits = item.traits?.value ?? item.system?.traits?.value ?? item.traits;
+        if (Array.isArray(rawTraits)) traits.push(...rawTraits.map(t => String(t).toLowerCase()));
+        else if (rawTraits instanceof Set) traits.push(...Array.from(rawTraits).map(t => String(t).toLowerCase()));
+
+        if (traits.some(t => ["healing", "potion", "elixir", "vitality"].includes(t))) {
+            return true;
+        }
+
+        // Impulses that heal
+        if (traits.includes("impulse")) {
+            const itemName = String(item.name || "").toLowerCase();
+            if (traits.includes("healing") || itemName.includes("balm") || itemName.includes("produce") || itemName.includes("herb")) {
+                return true;
+            }
+        }
+    }
+
+    // 4. Text & Keywords
+    const lowerText = String(text || "").toLowerCase();
+    if (
+        lowerText.includes("treat wounds") ||
+        lowerText.includes("battle medicine") ||
+        lowerText.includes("ocean's balm") ||
+        lowerText.includes("fresh produce") ||
+        lowerText.includes("potion of healing") ||
+        lowerText.includes("healing potion") ||
+        lowerText.includes("elixir of life") ||
+        lowerText.includes("soothing tonic") ||
+        lowerText.includes("[healing]") ||
+        lowerText.includes("[vitality]") ||
+        lowerText.includes("regains") ||
+        lowerText.includes("restores")
+    ) {
+        return true;
+    }
+
+    return false;
+}
