@@ -16,12 +16,32 @@ import { executeQuickStudy, QUICK_STUDY_MACRO_NAME, QUICK_STUDY_MACRO_ICON } fro
 import { registerSplitDamageCardButtons, convertSpellDiceFormula } from './split-spell-damage.js';
 import { registerSplitHealingCardButtons, convertHealingDiceFormula, rollSplitHealingFormula, triggerNativeInlineDamageRoll, promptSplitHealingDialog } from './split-healing.js';
 import { convertDiceFormula } from './dice-utils.js';
+import {
+    registerRiskDiceSettings,
+    registerRiskDiceSockets,
+    registerRiskDiceChatListeners,
+    registerRiskDiceSceneControls,
+    initRiskDiceHUD,
+    takeRisk,
+    openRiskDiceDialog,
+    getRiskDiceCount,
+    setRiskDiceCount,
+    resetRiskDice,
+    modifyRiskDiceCount,
+    executeCurrentPoolRoll,
+    TAKE_RISK_MACRO_NAME,
+    TAKE_RISK_MACRO_ICON,
+    RISK_MANAGER_MACRO_NAME,
+    RISK_MANAGER_MACRO_ICON
+} from './risk-dice.js';
 
 // --- 2. THE DESIRED MACRO STATE ---
 // Add any new macros to this array. The Smart Sync will handle the rest!
 const DESIRED_MACROS = [
     { name: QUICK_CRAFTING_MACRO_NAME, icon: QUICK_CRAFTING_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.executeQuickCrafting();` },
-    { name: QUICK_STUDY_MACRO_NAME, icon: QUICK_STUDY_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.executeQuickStudy();` }
+    { name: QUICK_STUDY_MACRO_NAME, icon: QUICK_STUDY_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.executeQuickStudy();` },
+    { name: TAKE_RISK_MACRO_NAME, icon: TAKE_RISK_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.takeRisk();` },
+    { name: RISK_MANAGER_MACRO_NAME, icon: RISK_MANAGER_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.openRiskDiceDialog();` }
 ];
 
 
@@ -130,6 +150,14 @@ Hooks.once('init', () => {
         type: Boolean,
         default: true
     });
+
+    // Register Risk Dice (Tension Dice) Settings
+    registerRiskDiceSettings();
+});
+
+// Scene Controls Integration (Risk Dice GM tool)
+Hooks.on('getSceneControlButtons', (controls) => {
+    registerRiskDiceSceneControls(controls);
 });
 
 Hooks.once('ready', async () => {
@@ -147,9 +175,23 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.rollSplitHealingFormula = rollSplitHealingFormula;
     game.pf2eAwesomeVariantRules.promptSplitHealingDialog = promptSplitHealingDialog;
 
+    // Risk Dice Global API
+    game.pf2eAwesomeVariantRules.takeRisk = takeRisk;
+    game.pf2eAwesomeVariantRules.openRiskDiceDialog = openRiskDiceDialog;
+    game.pf2eAwesomeVariantRules.getRiskDiceCount = getRiskDiceCount;
+    game.pf2eAwesomeVariantRules.setRiskDiceCount = setRiskDiceCount;
+    game.pf2eAwesomeVariantRules.resetRiskDice = resetRiskDice;
+    game.pf2eAwesomeVariantRules.modifyRiskDiceCount = modifyRiskDiceCount;
+    game.pf2eAwesomeVariantRules.rollCurrentPool = executeCurrentPoolRoll;
+
     // Initialize Chat Card Buttons
     registerSplitDamageCardButtons();
     registerSplitHealingCardButtons();
+
+    // Initialize Risk Dice Sockets, Listeners & Floating HUD
+    registerRiskDiceSockets();
+    registerRiskDiceChatListeners();
+    initRiskDiceHUD();
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";

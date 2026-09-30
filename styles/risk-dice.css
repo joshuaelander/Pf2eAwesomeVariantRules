@@ -1,0 +1,443 @@
+/* ==========================================================================
+   PF2e Awesome Variant Rules: Risk Dice (Tension Dice) Styles
+   ========================================================================== */
+
+/* --- 1. CHAT CARDS --- */
+
+.pf2e-risk-card {
+    font-family: var(--font-primary, "Signika", sans-serif);
+    border: 1px solid #7a1f1d;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #1f1d1d 0%, #141212 100%);
+    color: #e0e0e0;
+    padding: 10px;
+    margin: 4px 0;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.pf2e-risk-card.public {
+    border-color: #5c4a35;
+    background: linear-gradient(135deg, #24201c 0%, #171513 100%);
+}
+
+.pf2e-risk-card.gm-secret {
+    border-color: #8b1815;
+    background: linear-gradient(135deg, #261616 0%, #151010 100%);
+}
+
+/* Card Header */
+.risk-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+.risk-card-header i.header-icon {
+    font-size: 1.4em;
+    color: #d89f48;
+}
+
+.risk-card-header .header-titles {
+    flex: 1;
+}
+
+.risk-card-header h3 {
+    margin: 0;
+    font-size: 1.15em;
+    font-weight: 700;
+    color: #ffdda1;
+    letter-spacing: 0.5px;
+}
+
+.risk-card-header .subtitle {
+    font-size: 0.8em;
+    color: #a69c8d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Card Body */
+.risk-card-body {
+    font-size: 0.95em;
+    line-height: 1.4;
+}
+
+.risk-actor-tag {
+    font-weight: 600;
+    color: #f1c40f;
+}
+
+.risk-reason-box {
+    margin: 6px 0;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border-left: 3px solid #d89f48;
+    font-style: italic;
+    color: #d1c9bd;
+    border-radius: 0 4px 4px 0;
+}
+
+.risk-pool-status {
+    margin: 8px 0;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.risk-pool-badge {
+    background: #4a2a18;
+    border: 1px solid #d89f48;
+    color: #ffd89c;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.9em;
+}
+
+/* Secret Note */
+.risk-secret-note {
+    font-size: 0.85em;
+    color: #a89f91;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+/* Dice Results Container */
+.risk-dice-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+}
+
+.risk-die {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+    font-weight: 800;
+    font-size: 1.2em;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    transition: transform 0.15s ease;
+}
+
+.risk-die.safe {
+    background: linear-gradient(135deg, #2b332d 0%, #1e2420 100%);
+    border: 1px solid #4a6850;
+    color: #a8e6b1;
+}
+
+.risk-die.complication {
+    background: linear-gradient(135deg, #871c19 0%, #540e0c 100%);
+    border: 2px solid #ff4d4d;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(255, 50, 50, 0.6);
+    animation: risk-pulse 1.8s infinite;
+}
+
+.risk-die.complication i {
+    font-size: 0.6em;
+    margin-bottom: -2px;
+}
+
+@keyframes risk-pulse {
+    0% { transform: scale(1); box-shadow: 0 0 6px rgba(255, 50, 50, 0.6); }
+    50% { transform: scale(1.08); box-shadow: 0 0 14px rgba(255, 70, 70, 0.9); }
+    100% { transform: scale(1); box-shadow: 0 0 6px rgba(255, 50, 50, 0.6); }
+}
+
+/* Result Banners */
+.risk-banner {
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.risk-banner h4 {
+    margin: 0 0 4px 0;
+    font-size: 1em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.risk-banner p {
+    margin: 0;
+    font-size: 0.85em;
+    line-height: 1.3;
+}
+
+.risk-banner.danger {
+    background: linear-gradient(135deg, rgba(163, 31, 31, 0.35) 0%, rgba(94, 13, 13, 0.45) 100%);
+    border: 1px solid #b82d2d;
+    color: #ffc9c9;
+}
+
+.risk-banner.danger h4 {
+    color: #ff6e6e;
+}
+
+.risk-banner.safe {
+    background: linear-gradient(135deg, rgba(35, 78, 48, 0.3) 0%, rgba(18, 46, 27, 0.4) 100%);
+    border: 1px solid #3d794e;
+    color: #c9eed3;
+}
+
+.risk-banner.safe h4 {
+    color: #79dd92;
+}
+
+.risk-announce-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: #6a1614;
+    border: 1px solid #d44d47;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85em;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.risk-announce-btn:hover {
+    background: #8b1f1c;
+    transform: translateY(-1px);
+}
+
+.risk-announce-btn:active {
+    transform: translateY(0);
+}
+
+
+/* --- 2. FLOATING GM / PLAYER HUD --- */
+
+#pf2e-risk-dice-hud {
+    position: fixed;
+    top: 80px;
+    right: 320px;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    background: rgba(24, 21, 20, 0.88);
+    backdrop-filter: blur(6px);
+    border: 1px solid #5a4530;
+    border-radius: 20px;
+    padding: 3px 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-primary, "Signika", sans-serif);
+    color: #e0d8cf;
+    user-select: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#pf2e-risk-dice-hud:hover {
+    border-color: #d89f48;
+    box-shadow: 0 4px 16px rgba(216, 159, 72, 0.25);
+}
+
+.risk-hud-drag-handle {
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+}
+
+.risk-hud-drag-handle:active {
+    cursor: grabbing;
+}
+
+.risk-hud-icon {
+    color: #d89f48;
+    font-size: 1.1em;
+}
+
+.risk-hud-label {
+    font-weight: 600;
+    font-size: 0.9em;
+    color: #dfd5c7;
+}
+
+.risk-hud-badge {
+    background: #472615;
+    border: 1px solid #b87b33;
+    color: #ffdfa3;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85em;
+    padding: 0 5px;
+    margin-right: 4px;
+}
+
+.risk-hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    padding-left: 6px;
+    margin-left: 2px;
+}
+
+.risk-hud-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #d8cfc4;
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 0;
+    transition: all 0.15s ease;
+}
+
+.risk-hud-btn:hover {
+    background: #6a3a1f;
+    border-color: #d89f48;
+    color: #ffffff;
+    transform: scale(1.08);
+}
+
+.risk-hud-btn.take-risk-btn {
+    background: #5b211a;
+    border-color: #9c3328;
+    color: #ffcccc;
+}
+
+.risk-hud-btn.take-risk-btn:hover {
+    background: #842e23;
+    border-color: #ff604f;
+    color: #ffffff;
+}
+
+
+/* --- 3. RISK DICE MANAGER DIALOG --- */
+
+.risk-manager-dialog .dialog-content {
+    font-family: var(--font-primary, "Signika", sans-serif);
+}
+
+.risk-dialog-container {
+    padding: 5px;
+    color: #2b2b2b;
+}
+
+.risk-dialog-count-card {
+    text-align: center;
+    padding: 15px;
+    background: linear-gradient(135deg, #2b2520 0%, #1c1815 100%);
+    border: 1px solid #755535;
+    border-radius: 8px;
+    color: #f3ede4;
+    margin-bottom: 15px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.risk-dialog-count-number {
+    font-size: 2.8em;
+    font-weight: 800;
+    color: #ffcc66;
+    line-height: 1;
+    margin: 8px 0;
+    text-shadow: 0 0 10px rgba(255, 204, 102, 0.4);
+}
+
+.risk-dialog-count-label {
+    font-size: 0.9em;
+    color: #a89e92;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.risk-dialog-btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.risk-dialog-btn-grid .full-width {
+    grid-column: span 2;
+}
+
+.risk-dialog-btn-grid button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 36px;
+    font-weight: 600;
+    font-size: 0.9em;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 1px solid #555;
+    transition: background 0.15s ease;
+}
+
+.risk-dialog-btn-grid button.primary-action {
+    background: #8b231d;
+    border-color: #d13d34;
+    color: white;
+}
+
+.risk-dialog-btn-grid button.primary-action:hover {
+    background: #ad2e27;
+}
+
+.risk-dialog-btn-grid button.secondary-action {
+    background: #3e3328;
+    border-color: #6d5945;
+    color: #f0e6d6;
+}
+
+.risk-dialog-btn-grid button.secondary-action:hover {
+    background: #544537;
+}
+
+.risk-dialog-set-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+}
+
+.risk-dialog-set-group input {
+    text-align: center;
+    width: 60px;
+    height: 30px;
+    font-weight: bold;
+}
