@@ -28,7 +28,7 @@ export const TAKE_RISK_MACRO_NAME = "Take a Risk";
 export const TAKE_RISK_MACRO_ICON = "icons/sundries/gaming/dice-runed-brown.webp";
 
 export const RISK_MANAGER_MACRO_NAME = "Risk Dice Manager";
-export const RISK_MANAGER_MACRO_ICON = "icons/sundries/gaming/dice-pair.webp";
+export const RISK_MANAGER_MACRO_ICON = "icons/sundries/gaming/dice-pair-white-green.webp";
 
 /* ------------------------------------------------------------------------- */
 /* 1. SETTINGS REGISTRATION                                                  */
@@ -44,7 +44,7 @@ export function registerRiskDiceSettings() {
         default: true,
         onChange: () => {
             updateRiskDiceHUD();
-            ui.controls?.render();
+            if (ui.controls?.rendered) ui.controls.render();
         }
     });
 
@@ -57,7 +57,7 @@ export function registerRiskDiceSettings() {
         default: 0,
         onChange: (newCount) => {
             updateRiskDiceHUD(newCount);
-            ui.controls?.render();
+            if (ui.controls?.rendered) ui.controls.render();
             updateOpenManagerDialog(newCount);
         }
     });
@@ -808,17 +808,40 @@ export function registerRiskDiceSceneControls(controls) {
     if (!isRiskDiceEnabled()) return;
     if (!game.user.isGM) return;
 
-    const tokenControls = controls.find(c => c.name === "token");
-    if (tokenControls) {
-        const count = getRiskDiceCount();
-        tokenControls.tools.push({
-            name: "risk-dice-manager",
-            title: `Risk Dice (Pool: ${count})`,
-            icon: "fa-solid fa-dice-d6",
-            visible: true,
-            onClick: () => openRiskDiceDialog(),
-            button: true
-        });
+    // Support Array (v12 and earlier), Map/Collection, or Record/Object (v13/v14)
+    let tokenControls = null;
+    if (Array.isArray(controls)) {
+        tokenControls = controls.find(c => c?.name === "token");
+    } else if (controls instanceof Map || typeof controls?.get === "function") {
+        tokenControls = controls.get("token");
+    } else if (controls && typeof controls === "object") {
+        tokenControls = controls.token || Object.values(controls).find(c => c?.name === "token");
+    }
+    if (!tokenControls) return;
+
+    const count = getRiskDiceCount();
+    const toolData = {
+        name: "risk-dice-manager",
+        title: `Risk Dice (Pool: ${count})`,
+        icon: "fa-solid fa-dice-d6",
+        visible: true,
+        button: true,
+        onClick: () => openRiskDiceDialog(),
+        onChange: () => openRiskDiceDialog(),
+        callback: () => openRiskDiceDialog()
+    };
+
+    if (Array.isArray(tokenControls.tools)) {
+        const existingIdx = tokenControls.tools.findIndex(t => t?.name === "risk-dice-manager");
+        if (existingIdx >= 0) {
+            tokenControls.tools[existingIdx] = toolData;
+        } else {
+            tokenControls.tools.push(toolData);
+        }
+    } else if (tokenControls.tools instanceof Map || typeof tokenControls.tools?.set === "function") {
+        tokenControls.tools.set("risk-dice-manager", toolData);
+    } else if (tokenControls.tools && typeof tokenControls.tools === "object") {
+        tokenControls.tools["risk-dice-manager"] = toolData;
     }
 }
 
