@@ -27,6 +27,12 @@ A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
   - **On-Screen HUD**: A draggable widget displaying the current count with quick-action buttons (`+1 & Roll`, `Roll Pool`, `Reset`, `Manager Dialog`).
   - **Scene Controls**: A tool button in the Token Layer toolbar showing the live count.
   - **Risk Dice Manager Dialog**: Accessible via macro or HUD to manually adjust, add, or roll dice at will.
+- **Complication Roll Table (Optional)**:
+  - When a complication occurs, GMs (or players) can roll on a d20 complication table to determine what consequence strikes the party.
+  - Can be triggered directly from the **GM Secret Risk Card**, via the **Roll Complication** macro, or inside the **Risk Dice Manager**.
+  - Fully customizable ranges in module settings (e.g. `1-10: Hostile Patrol`, `11-15: Environmental Hazard`, `16-20: Party sustains an injury`).
+  - Supports linking directly to an existing Foundry World RollTable by name/UUID.
+  - Results are whispered secretly to the GM by default (with a one-click button to reveal to players), or can be set to public in settings.
 - **Configurable Settings**:
   - Enable/disable the variant rule.
   - Custom die face (d6 default, d4, d8, d10, d12, d20).
@@ -34,6 +40,11 @@ A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
   - Public chat announcement toggle.
   - Show/hide floating HUD widget.
   - Player dice count visibility toggle.
+  - Enable/disable Complication Roll Table.
+  - Complication die formula (default `1d20`).
+  - Complication table ranges and descriptions.
+  - Optional Foundry RollTable link.
+  - Show complication results to players toggle.
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
 

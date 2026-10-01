@@ -30,6 +30,9 @@ export const TAKE_RISK_MACRO_ICON = "icons/sundries/gaming/dice-runed-brown.webp
 export const RISK_MANAGER_MACRO_NAME = "Risk Dice Manager";
 export const RISK_MANAGER_MACRO_ICON = "icons/sundries/gaming/dice-pair-white-green.webp";
 
+export const ROLL_COMPLICATION_MACRO_NAME = "Roll Complication";
+export const ROLL_COMPLICATION_MACRO_ICON = "icons/sundries/gaming/dice-d20-red.webp";
+
 /* ------------------------------------------------------------------------- */
 /* 1. SETTINGS REGISTRATION                                                  */
 /* ------------------------------------------------------------------------- */
@@ -129,6 +132,52 @@ export function registerRiskDiceSettings() {
             updateRiskDiceHUD();
         }
     });
+
+    // --- Complication Table Settings ---
+    game.settings.register(MODULE_ID, "riskDiceComplicationTableEnabled", {
+        name: "Enable Complication Roll Table",
+        hint: "When a complication occurs, enables rolling on a d20 complication table to determine the consequence.",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register(MODULE_ID, "riskDiceComplicationFormula", {
+        name: "Complication Die Formula",
+        hint: "The dice formula to roll on the complication table (standard is 1d20).",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "1d20"
+    });
+
+    game.settings.register(MODULE_ID, "riskDiceComplicationTableEntries", {
+        name: "Complication Table Ranges",
+        hint: "Define outcomes by roll range (min-max: outcome), one per line. Example:\n1-15: Random Encounter\n16-20: Party sustains an injury",
+        scope: "world",
+        config: true,
+        type: String,
+        default: "1-10: Wandering Monsters / Hostile Patrol\n11-15: Environmental Hazard or Structural Cave-in\n16-18: Lost Time & Resource Depletion (Torches burn out, rations spoiled)\n19-20: Party sustains an Injury or Condition (Fatigued, Clumsy 1, etc.)"
+    });
+
+    game.settings.register(MODULE_ID, "riskDiceComplicationRollTable", {
+        name: "Use Foundry RollTable (Optional)",
+        hint: "Name or UUID of an existing Foundry RollTable to draw from instead of the text ranges above. Leave blank to use the text ranges.",
+        scope: "world",
+        config: true,
+        type: String,
+        default: ""
+    });
+
+    game.settings.register(MODULE_ID, "riskDiceComplicationPublic", {
+        name: "Show Complication Result to Players",
+        hint: "If enabled, complication roll results are shown publicly to all players. If disabled, results are secret to the GM.",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false
+    });
 }
 
 /* ------------------------------------------------------------------------- */
@@ -214,6 +263,18 @@ export function registerRiskDiceSockets() {
                 await announceComplicationToChat({
                     count: data.count,
                     reason: data.reason || ""
+                });
+                break;
+            case "rollComplication":
+                await rollComplication({
+                    reason: data.reason || "",
+                    userId: data.userId
+                });
+                break;
+            case "announceComplicationResult":
+                await announceComplicationResultToChat({
+                    rollTotal: data.rollTotal,
+                    text: data.text || ""
                 });
                 break;
             default:
@@ -536,12 +597,20 @@ async function postGMRiskRollCard({
 
     let outcomeBanner = "";
     if (isComplication) {
+        const compTableEnabled = Boolean(game.settings.get(MODULE_ID, "riskDiceComplicationTableEnabled"));
+        const rollCompBtn = compTableEnabled ? `
+            <button type="button" class="risk-roll-complication-btn" data-action="roll-complication" data-reason="${escapeHtml(reason)}">
+                <i class="fa-solid fa-dice-d20"></i> Roll Complication Table
+            </button>
+        ` : "";
+
         outcomeBanner = `
             <div class="risk-banner danger">
                 <h4><i class="fa-solid fa-triangle-exclamation"></i> COMPLICATION TRIGGERED!</h4>
                 <p>Rolled <strong>${complicationCount}</strong> complication ${complicationCount === 1 ? 'die' : 'dice'} (face ${targetNumber})!</p>
                 <p>Something bad happens or conditions escalate.</p>
                 ${wasReset ? '<p style="margin-top:4px;"><em>Risk Dice counter automatically reset to <strong>0</strong>.</em></p>' : ''}
+                ${rollCompBtn}
                 <button type="button" class="risk-announce-btn" data-action="announce-complication" data-count="${newCount}" data-reason="${escapeHtml(reason)}">
                     <i class="fa-solid fa-bullhorn"></i> Announce Complication to Players
                 </button>
@@ -627,6 +696,171 @@ export async function announceComplicationToChat({ count = 0, reason = "" } = {}
 function escapeHtml(text) {
     if (!text) return "";
     return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#039;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ------------------------------------------------------------------------- */
+/* 5b. COMPLICATION ROLL TABLE                                               */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Parses multiline string of ranges (e.g. "1-15: Random Encounter") into structured objects.
+ */
+export function parseComplicationTable(text) {
+    if (!text || typeof text !== "string") return [];
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    const entries = [];
+    for (const line of lines) {
+        const match = line.match(/^(\d+)(?:\s*(?:-|\.\.)\s*(\d+))?\s*[:\-–]\s*(.+)$/);
+        if (match) {
+            const min = parseInt(match[1], 10);
+            const max = match[2] ? parseInt(match[2], 10) : min;
+            const description = match[3].trim();
+            entries.push({ min: Math.min(min, max), max: Math.max(min, max), text: description });
+        }
+    }
+    return entries;
+}
+
+/**
+ * Finds matching complication outcome text from parsed entries.
+ */
+export function getComplicationOutcome(rollTotal, entries) {
+    for (const entry of entries) {
+        if (rollTotal >= entry.min && rollTotal <= entry.max) {
+            return entry.text;
+        }
+    }
+    return null;
+}
+
+/**
+ * Rolls for complication consequence using d20 range table or configured RollTable.
+ */
+export async function rollComplication({ reason = "", userId = game.user.id } = {}) {
+    if (!isRiskDiceEnabled()) {
+        ui.notifications.warn("Risk Dice variant is currently disabled in module settings.");
+        return;
+    }
+
+    if (!game.settings.get(MODULE_ID, "riskDiceComplicationTableEnabled")) {
+        ui.notifications.warn("Complication roll table is currently disabled in module settings.");
+        return;
+    }
+
+    if (!game.user.isGM) {
+        const activeGM = getPrimaryActiveGM();
+        if (!activeGM) {
+            ui.notifications.warn("Risk Dice: An active Game Master must be online to roll complications.");
+            return;
+        }
+        game.socket.emit(SOCKET_EVENT, {
+            action: "rollComplication",
+            userId: game.user.id,
+            reason: reason
+        });
+        ui.notifications.info("Rolling Complication... request sent to Game Master.");
+        return;
+    }
+
+    const triggeringUser = game.users.get(userId) || game.user;
+    const speaker = ChatMessage.getSpeaker({ user: triggeringUser });
+    const isPublic = Boolean(game.settings.get(MODULE_ID, "riskDiceComplicationPublic"));
+
+    // Check if an existing Foundry RollTable is configured
+    const tableNameOrUuid = game.settings.get(MODULE_ID, "riskDiceComplicationRollTable")?.trim();
+    if (tableNameOrUuid) {
+        const table = fromUuidSync(tableNameOrUuid) || game.tables.getName(tableNameOrUuid);
+        if (table) {
+            const rollMode = isPublic ? CONST.DICE_ROLL_MODES.PUBLIC : CONST.DICE_ROLL_MODES.BLIND;
+            await table.draw({ rollMode: rollMode });
+            return;
+        }
+    }
+
+    // Roll formula and evaluate against ranges
+    const formula = game.settings.get(MODULE_ID, "riskDiceComplicationFormula") || "1d20";
+    const roll = new Roll(formula);
+    await roll.evaluate();
+
+    const tableText = game.settings.get(MODULE_ID, "riskDiceComplicationTableEntries") || "";
+    const entries = parseComplicationTable(tableText);
+    const outcome = getComplicationOutcome(roll.total, entries) || "Complication occurs (no matching range defined in settings).";
+
+    const gmRecipients = ChatMessage.getWhisperRecipients("GM").map(u => u.id);
+    const reasonHtml = reason ? `<div class="risk-reason-box"><i class="fa-solid fa-quote-left"></i> ${reason}</div>` : "";
+
+    const announceBtn = !isPublic ? `
+        <button type="button" class="risk-announce-btn risk-announce-result-btn" data-action="announce-complication-result" data-roll="${roll.total}" data-text="${escapeHtml(outcome)}">
+            <i class="fa-solid fa-bullhorn"></i> Announce Result to Players
+        </button>
+    ` : "";
+
+    const content = `
+        <div class="pf2e-risk-card ${isPublic ? 'public' : 'gm-secret'}" style="border-color: #b82d2d; background: linear-gradient(135deg, #2b1414 0%, #170d0d 100%);">
+            <div class="risk-card-header">
+                <i class="fa-solid fa-dice-d20 header-icon" style="color: #ff5252;"></i>
+                <div class="header-titles">
+                    <h3 style="color: #ff9191;">Complication Table Roll</h3>
+                    <div class="subtitle">Formula: ${formula}</div>
+                </div>
+            </div>
+            <div class="risk-card-body">
+                ${reasonHtml}
+                <div style="text-align: center; margin: 8px 0;">
+                    <div class="risk-d20-display" title="Rolled ${roll.total}">
+                        <i class="fa-solid fa-dice-d20" style="font-size: 0.55em; margin-bottom: -3px; color: #ff8585;"></i>
+                        <span>${roll.total}</span>
+                    </div>
+                </div>
+                <div class="risk-complication-outcome">
+                    <h4><i class="fa-solid fa-triangle-exclamation"></i> Complication:</h4>
+                    <div class="risk-complication-text">${outcome}</div>
+                </div>
+                ${announceBtn}
+            </div>
+        </div>
+    `;
+
+    await ChatMessage.create({
+        speaker: speaker,
+        content: content,
+        flavor: `Complication Roll (${formula})`,
+        rolls: [roll],
+        whisper: isPublic ? [] : gmRecipients,
+        blind: !isPublic
+    });
+}
+
+/**
+ * Publicly announces the complication outcome to chat.
+ */
+export async function announceComplicationResultToChat({ rollTotal = 0, text = "" } = {}) {
+    if (!text) return;
+
+    const rollInfo = rollTotal > 0 ? ` (Rolled ${rollTotal})` : "";
+    const content = `
+        <div class="pf2e-risk-card public" style="border-color: #b82d2d; background: linear-gradient(135deg, #2b1414 0%, #170d0d 100%);">
+            <div class="risk-card-header">
+                <i class="fa-solid fa-triangle-exclamation header-icon" style="color: #ff5252;"></i>
+                <div class="header-titles">
+                    <h3 style="color: #ff9191;">Complication In Effect!</h3>
+                    <div class="subtitle">Risk Dice Consequence${rollInfo}</div>
+                </div>
+            </div>
+            <div class="risk-card-body">
+                <div class="risk-complication-outcome" style="margin-top: 5px;">
+                    <div class="risk-complication-text" style="font-size: 1.1em; color: #fff;">
+                        ${text}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    await ChatMessage.create({
+        speaker: { alias: "Risk Dice" },
+        content: content
+    });
 }
 
 /* ------------------------------------------------------------------------- */
@@ -882,6 +1116,9 @@ export function openRiskDiceDialog() {
                 <button type="button" class="primary-action full-width" id="dialog-take-risk">
                     <i class="fa-solid fa-plus"></i> Take a Risk (+1 & Secret Roll)
                 </button>
+                <button type="button" class="primary-action full-width" id="dialog-roll-complication">
+                    <i class="fa-solid fa-dice-d20"></i> Roll Complication Table (d20)
+                </button>
                 <button type="button" class="secondary-action" id="dialog-roll-pool">
                     <i class="fa-solid fa-dice-d6"></i> Roll Current Pool
                 </button>
@@ -917,6 +1154,10 @@ export function openRiskDiceDialog() {
         render: (html) => {
             html.find("#dialog-take-risk").click(async () => {
                 await executeRiskRoll({ reason: "GM Risk Trigger" });
+            });
+
+            html.find("#dialog-roll-complication").click(async () => {
+                await rollComplication({ reason: "Manual Complication Roll" });
             });
 
             html.find("#dialog-roll-pool").click(async () => {
@@ -959,6 +1200,7 @@ export function registerRiskDiceChatListeners() {
         const root = html instanceof HTMLElement ? html : (html[0] ?? html);
         if (!root || !root.querySelector) return;
 
+        // Announce Complication Triggered
         const announceBtn = root.querySelector('.risk-announce-btn[data-action="announce-complication"]');
         if (announceBtn) {
             announceBtn.addEventListener("click", async (e) => {
@@ -966,6 +1208,27 @@ export function registerRiskDiceChatListeners() {
                 const count = parseInt(announceBtn.dataset.count, 10) || 0;
                 const reason = announceBtn.dataset.reason || "";
                 await announceComplicationToChat({ count, reason });
+            });
+        }
+
+        // Roll Complication Table
+        const rollCompBtn = root.querySelector('.risk-roll-complication-btn[data-action="roll-complication"]');
+        if (rollCompBtn) {
+            rollCompBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
+                const reason = rollCompBtn.dataset.reason || "";
+                await rollComplication({ reason });
+            });
+        }
+
+        // Announce Specific Complication Result
+        const announceResultBtn = root.querySelector('.risk-announce-result-btn[data-action="announce-complication-result"]');
+        if (announceResultBtn) {
+            announceResultBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
+                const rollTotal = parseInt(announceResultBtn.dataset.roll, 10) || 0;
+                const text = announceResultBtn.dataset.text || "";
+                await announceComplicationResultToChat({ rollTotal, text });
             });
         }
     });

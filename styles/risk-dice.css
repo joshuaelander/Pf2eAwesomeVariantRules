@@ -232,6 +232,79 @@
     transform: translateY(0);
 }
 
+.risk-roll-complication-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    background: linear-gradient(135deg, #7a221b 0%, #4a120e 100%);
+    border: 1px solid #e04338;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9em;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.risk-roll-complication-btn:hover {
+    background: linear-gradient(135deg, #992c23 0%, #611813 100%);
+    box-shadow: 0 0 10px rgba(224, 67, 56, 0.5);
+    transform: translateY(-1px);
+}
+
+.risk-roll-complication-btn:active {
+    transform: translateY(0);
+}
+
+/* Complication Outcome Box */
+.risk-complication-outcome {
+    margin: 10px 0;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, rgba(80, 16, 14, 0.5) 0%, rgba(38, 8, 7, 0.6) 100%);
+    border: 1px solid #b82d2d;
+    border-left: 4px solid #ff4747;
+    border-radius: 4px;
+}
+
+.risk-complication-outcome h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.95em;
+    font-weight: 700;
+    color: #ff9191;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.risk-complication-text {
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #ffe6e6;
+    line-height: 1.4;
+}
+
+.risk-d20-display {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 1.35em;
+    background: linear-gradient(135deg, #7a221b 0%, #3d100d 100%);
+    border: 2px solid #e04338;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(224, 67, 56, 0.4);
+    margin: 6px auto;
+}
+
 
 /* --- 2. FLOATING GM / PLAYER HUD --- */
 

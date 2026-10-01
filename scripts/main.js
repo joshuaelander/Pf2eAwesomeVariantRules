@@ -32,7 +32,10 @@ import {
     TAKE_RISK_MACRO_NAME,
     TAKE_RISK_MACRO_ICON,
     RISK_MANAGER_MACRO_NAME,
-    RISK_MANAGER_MACRO_ICON
+    RISK_MANAGER_MACRO_ICON,
+    ROLL_COMPLICATION_MACRO_NAME,
+    ROLL_COMPLICATION_MACRO_ICON,
+    rollComplication
 } from './risk-dice.js';
 
 // --- 2. THE DESIRED MACRO STATE ---
@@ -41,7 +44,8 @@ const DESIRED_MACROS = [
     { name: QUICK_CRAFTING_MACRO_NAME, icon: QUICK_CRAFTING_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.executeQuickCrafting();` },
     { name: QUICK_STUDY_MACRO_NAME, icon: QUICK_STUDY_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.executeQuickStudy();` },
     { name: TAKE_RISK_MACRO_NAME, icon: TAKE_RISK_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.takeRisk();` },
-    { name: RISK_MANAGER_MACRO_NAME, icon: RISK_MANAGER_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.openRiskDiceDialog();` }
+    { name: RISK_MANAGER_MACRO_NAME, icon: RISK_MANAGER_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.openRiskDiceDialog();` },
+    { name: ROLL_COMPLICATION_MACRO_NAME, icon: ROLL_COMPLICATION_MACRO_ICON, command: `game.pf2eAwesomeVariantRules.rollComplication();` }
 ];
 
 
@@ -183,6 +187,7 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.resetRiskDice = resetRiskDice;
     game.pf2eAwesomeVariantRules.modifyRiskDiceCount = modifyRiskDiceCount;
     game.pf2eAwesomeVariantRules.rollCurrentPool = executeCurrentPoolRoll;
+    game.pf2eAwesomeVariantRules.rollComplication = rollComplication;
 
     // Initialize Chat Card Buttons
     registerSplitDamageCardButtons();
