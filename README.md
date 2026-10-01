@@ -2,17 +2,19 @@
 Overview: A collection of tweaks and house rules that my tables have found fun when playing PF2e. 
 
 Contents: 
-1. Added General Feats
-2. Added Skill Feats (TBD)
+1. Added Extra General Feats (Done)
+2. Added Extra Skill Feats (Done)
 3. Enhanced Recall Knowledge (Requires PF2eAwesomeMacrosForPlayers)
 4. Improved Crafting (Done)
 5. Improved Learn-a-Spell (Done)
-6. Alternate Spell Damage / Healing Calculation (Done - Split Dice Variant)
+6. Split Dice Variant - Alternate Spell Damage / Healing Calculation (Done)
 7. Improved Hero Points (Requires Pf2eImprovedHeroPoints)
 8. Improved Wounded Recovery (Requires Pf2eImprovedHeroPoints)
 9. Half Price Consumables (TBD)
 10. Spell Runes (TBD)
 11. Risk Dice / Tension Dice (Done)
+12. Sanity Dice (TBD)
+13. Spellcasting Modifiers (TBD)
 
 ### Risk Dice (Tension Dice Variant)
 A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
