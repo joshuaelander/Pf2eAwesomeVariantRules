@@ -154,7 +154,7 @@ export function registerRiskDiceSettings() {
 
     game.settings.register(MODULE_ID, "riskDiceComplicationTableEntries", {
         name: "Complication Table Ranges",
-        hint: "Define outcomes by roll range (min-max: outcome), one per line. Example:\n1-15: Random Encounter\n16-20: Party sustains an injury",
+        hint: "Define outcomes by roll range (min-max: outcome), separated by semicolons or new lines. Example: 1-15: Random Encounter; 16-20: Party sustains an injury",
         scope: "world",
         config: true,
         type: String,
@@ -707,7 +707,7 @@ function escapeHtml(text) {
  */
 export function parseComplicationTable(text) {
     if (!text || typeof text !== "string") return [];
-    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/[;\r\n]+/).map(l => l.trim()).filter(Boolean);
     const entries = [];
     for (const line of lines) {
         const match = line.match(/^(\d+)(?:\s*(?:-|\.\.)\s*(\d+))?\s*[:\-–]\s*(.+)$/);
@@ -766,22 +766,23 @@ export async function rollComplication({ reason = "", userId = game.user.id } = 
     const speaker = ChatMessage.getSpeaker({ user: triggeringUser });
     const isPublic = Boolean(game.settings.get(MODULE_ID, "riskDiceComplicationPublic"));
 
+    // Roll once using the configured formula for either table source.
+    const formula = game.settings.get(MODULE_ID, "riskDiceComplicationFormula") || "1d20";
+    const roll = new Roll(formula);
+    await roll.evaluate();
+
     // Check if an existing Foundry RollTable is configured
     const tableNameOrUuid = game.settings.get(MODULE_ID, "riskDiceComplicationRollTable")?.trim();
     if (tableNameOrUuid) {
         const table = fromUuidSync(tableNameOrUuid) || game.tables.getName(tableNameOrUuid);
         if (table) {
             const rollMode = isPublic ? CONST.DICE_ROLL_MODES.PUBLIC : CONST.DICE_ROLL_MODES.BLIND;
-            await table.draw({ rollMode: rollMode });
+            await table.draw({ roll, rollMode });
             return;
         }
     }
 
     // Roll formula and evaluate against ranges
-    const formula = game.settings.get(MODULE_ID, "riskDiceComplicationFormula") || "1d20";
-    const roll = new Roll(formula);
-    await roll.evaluate();
-
     const tableText = game.settings.get(MODULE_ID, "riskDiceComplicationTableEntries") || "";
     const entries = parseComplicationTable(tableText);
     const outcome = getComplicationOutcome(roll.total, entries) || "Complication occurs (no matching range defined in settings).";
