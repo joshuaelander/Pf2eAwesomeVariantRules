@@ -31,7 +31,7 @@ export const RISK_MANAGER_MACRO_NAME = "Risk Dice Manager";
 export const RISK_MANAGER_MACRO_ICON = "icons/sundries/gaming/dice-pair-white-green.webp";
 
 export const ROLL_COMPLICATION_MACRO_NAME = "Roll Complication";
-export const ROLL_COMPLICATION_MACRO_ICON = "icons/sundries/gaming/dice-d20-red.webp";
+export const ROLL_COMPLICATION_MACRO_ICON = "icons/sundries/gaming/game-magic-eight-ball.webp";
 
 /* ------------------------------------------------------------------------- */
 /* 1. SETTINGS REGISTRATION                                                  */
@@ -47,7 +47,9 @@ export function registerRiskDiceSettings() {
         default: true,
         onChange: () => {
             updateRiskDiceHUD();
-            if (ui.controls?.rendered) ui.controls.render();
+            setTimeout(() => {
+                if (ui.controls?.rendered) ui.controls.render();
+            }, 0);
         }
     });
 
@@ -111,19 +113,29 @@ export function registerRiskDiceSettings() {
 
     game.settings.register(MODULE_ID, "riskDiceShowHud", {
         name: "Show Risk Dice HUD",
-        hint: "Display an on-screen widget for the GM showing current Risk Dice and quick controls.",
+        hint: "Display an on-screen widget showing current Risk Dice and quick controls (shows pool count or '?' based on GM settings).",
         scope: "client",
         config: true,
         type: Boolean,
         default: true,
         onChange: () => {
             updateRiskDiceHUD();
+            if (ui.controls?.rendered) ui.controls.render();
         }
+    });
+
+    game.settings.register(MODULE_ID, "riskDicePlayerCanSeeRoll", {
+        name: "Players Can See Dice Roll",
+        hint: "Allow players to see the risk dice roll results and outcome card in chat. When enabled, the result card is shown publicly to all players instead of being whispered secretly to the Game Master.",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false
     });
 
     game.settings.register(MODULE_ID, "riskDicePlayerCanSeeCount", {
         name: "Players Can See Dice Count",
-        hint: "Allow players to see the current Risk Dice count in public announcements and HUD.",
+        hint: "Allow players to see the current Risk Dice count in public announcements and HUD widget. If unchecked, players see '?' instead.",
         scope: "world",
         config: true,
         type: Boolean,
@@ -224,30 +236,45 @@ export async function modifyRiskDiceCount(delta) {
     return updated;
 }
 
-function getPrimaryActiveGM() {
-    const activeGMs = game.users.filter(u => u.isGM && u.active).sort((a, b) => a.id.localeCompare(b.id));
-    return activeGMs[0] || null;
+export function getPrimaryActiveGM() {
+    if (game.users?.activeGM) return game.users.activeGM;
+    const activeGMs = game.users?.filter(u => u.isGM && (u.active || u.id === game.user.id)).sort((a, b) => a.id.localeCompare(b.id)) || [];
+    return activeGMs[0] || game.users?.find(u => u.isGM && u.active) || null;
+}
+
+export function isPrimaryActiveGM() {
+    if (!game.user?.isGM) return false;
+    if (game.users?.activeGM) return game.users.activeGM.id === game.user.id;
+    const activeGMs = game.users?.filter(u => u.isGM && (u.active || u.id === game.user.id)).sort((a, b) => a.id.localeCompare(b.id)) || [];
+    return activeGMs.length === 0 || activeGMs[0]?.id === game.user.id;
 }
 
 /* ------------------------------------------------------------------------- */
 /* 3. SOCKET HANDLING                                                        */
 /* ------------------------------------------------------------------------- */
 
+let socketsRegistered = false;
+
 export function registerRiskDiceSockets() {
+    if (socketsRegistered) return;
+    if (!game.socket) return;
+    socketsRegistered = true;
+
     game.socket.on(SOCKET_EVENT, async (data) => {
         if (!data || typeof data !== "object") return;
 
         // Only the designated primary GM executes authoritative changes
-        if (!game.user.isGM) return;
-        const primaryGM = getPrimaryActiveGM();
-        if (primaryGM?.id !== game.user.id) return;
+        if (!isPrimaryActiveGM()) return;
+
+        console.log("PF2e Awesome Variant Rules | Risk Dice socket action received:", data.action, data);
 
         switch (data.action) {
             case "takeRisk":
                 await executeRiskRoll({
                     reason: data.reason || "",
                     userId: data.userId,
-                    actorId: data.actorId
+                    actorId: data.actorId,
+                    actorUuid: data.actorUuid
                 });
                 break;
             case "setCount":
@@ -318,7 +345,8 @@ export async function takeRisk({ reason = "", actor = null, skipPrompt = false }
         await executeRiskRoll({
             reason: activityReason,
             userId: game.user.id,
-            actorId: selectedActor?.id
+            actorId: selectedActor?.id || null,
+            actorUuid: selectedActor?.uuid || null
         });
     } else {
         // Player: delegate to active GM via socket
@@ -331,11 +359,17 @@ export async function takeRisk({ reason = "", actor = null, skipPrompt = false }
         game.socket.emit(SOCKET_EVENT, {
             action: "takeRisk",
             userId: game.user.id,
-            actorId: selectedActor?.id,
+            actorId: selectedActor?.id || null,
+            actorUuid: selectedActor?.uuid || null,
             reason: activityReason
         });
 
-        ui.notifications.info("Taking a Risk... secret roll sent to the Game Master.");
+        const canSeeRoll = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeRoll"));
+        if (canSeeRoll) {
+            ui.notifications.info("Taking a Risk... rolling Risk Dice!");
+        } else {
+            ui.notifications.info("Taking a Risk... secret roll sent to the Game Master.");
+        }
     }
 }
 
@@ -390,7 +424,7 @@ async function promptRiskReasonDialog() {
 /**
  * Executes the authoritative Risk Roll (increments count, rolls secretly for GM).
  */
-export async function executeRiskRoll({ reason = "", userId = game.user.id, actorId = null } = {}) {
+export async function executeRiskRoll({ reason = "", userId = game.user.id, actorId = null, actorUuid = null } = {}) {
     if (!isRiskDiceEnabled()) return;
 
     const oldCount = getRiskDiceCount();
@@ -407,7 +441,19 @@ export async function executeRiskRoll({ reason = "", userId = game.user.id, acto
     await roll.evaluate();
 
     const triggeringUser = game.users.get(userId) || game.user;
-    const actor = actorId ? game.actors.get(actorId) : (triggeringUser.character || null);
+    let actor = null;
+    if (actorUuid) {
+        try {
+            const doc = fromUuidSync(actorUuid);
+            actor = doc?.actor || doc;
+        } catch {}
+    }
+    if (!actor && actorId) {
+        actor = game.actors.get(actorId) || null;
+    }
+    if (!actor) {
+        actor = triggeringUser.character || null;
+    }
     const speaker = ChatMessage.getSpeaker({ actor: actor, user: triggeringUser });
 
     // Extract dice results
@@ -429,9 +475,11 @@ export async function executeRiskRoll({ reason = "", userId = game.user.id, acto
         await setRiskDiceCount(0);
     }
 
-    // 1. Post Public Announcement Card (if enabled)
+    const playersCanSeeRoll = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeRoll"));
+
+    // 1. Post Public Announcement Card (only if the roll is kept secret to GM and announcement is enabled)
     const publicAnnouncement = Boolean(game.settings.get(MODULE_ID, "riskDicePublicAnnouncement"));
-    if (publicAnnouncement) {
+    if (!playersCanSeeRoll && publicAnnouncement) {
         await postPublicRiskCard({
             user: triggeringUser,
             actor,
@@ -443,8 +491,8 @@ export async function executeRiskRoll({ reason = "", userId = game.user.id, acto
         });
     }
 
-    // 2. Post Secret GM Roll Card (whispered + blind)
-    await postGMRiskRollCard({
+    // 2. Post Roll Result Card (public to all if playersCanSeeRoll is enabled, otherwise secret to GM)
+    await postRiskRollCard({
         roll,
         user: triggeringUser,
         actor,
@@ -457,7 +505,8 @@ export async function executeRiskRoll({ reason = "", userId = game.user.id, acto
         isComplication,
         complicationCount,
         reason,
-        wasReset: isComplication && resetOnComplication
+        wasReset: isComplication && resetOnComplication,
+        isPublic: playersCanSeeRoll
     });
 }
 
@@ -500,7 +549,9 @@ export async function executeCurrentPoolRoll({ reason = "", userId = game.user.i
         await setRiskDiceCount(0);
     }
 
-    await postGMRiskRollCard({
+    const playersCanSeeRoll = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeRoll"));
+
+    await postRiskRollCard({
         roll,
         user: triggeringUser,
         actor: null,
@@ -513,7 +564,8 @@ export async function executeCurrentPoolRoll({ reason = "", userId = game.user.i
         isComplication,
         complicationCount,
         reason: reason || "Manual Pool Roll",
-        wasReset: isComplication && resetOnComplication
+        wasReset: isComplication && resetOnComplication,
+        isPublic: playersCanSeeRoll
     });
 }
 
@@ -524,12 +576,10 @@ async function postPublicRiskCard({ user, actor, speaker, oldCount, newCount, di
     const actorName = actor?.name || speaker.alias || user.name || "A player";
     const canSeeCount = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeCount"));
 
-    const countDisplay = canSeeCount
-        ? `<div class="risk-pool-status">
-               <span>Risk Dice Pool:</span>
-               <span class="risk-pool-badge">${newCount} ${newCount === 1 ? 'Die' : 'Dice'} (${newCount}d${dieFaces})</span>
-           </div>`
-        : "";
+    const countDisplay = `<div class="risk-pool-status">
+        <span>Risk Dice Pool:</span>
+        <span class="risk-pool-badge">${canSeeCount ? `${newCount} ${newCount === 1 ? 'Die' : 'Dice'} (${newCount}d${dieFaces})` : `? Dice`}</span>
+    </div>`;
 
     const reasonHtml = reason
         ? `<div class="risk-reason-box"><i class="fa-solid fa-quote-left"></i> ${reason}</div>`
@@ -563,9 +613,9 @@ async function postPublicRiskCard({ user, actor, speaker, oldCount, newCount, di
 }
 
 /**
- * Posts the secret roll card whispered and blinded to the Game Master.
+ * Posts the roll card (public or whispered to GM depending on isPublic).
  */
-async function postGMRiskRollCard({
+export async function postRiskRollCard({
     roll,
     user,
     actor,
@@ -578,7 +628,8 @@ async function postGMRiskRollCard({
     isComplication,
     complicationCount,
     reason,
-    wasReset
+    wasReset,
+    isPublic = false
 }) {
     const actorName = actor?.name || speaker.alias || user.name || "Someone";
 
@@ -604,6 +655,13 @@ async function postGMRiskRollCard({
             </button>
         ` : "";
 
+        // Only show "Announce Complication to Players" button if the roll card was secret
+        const announceBtn = !isPublic ? `
+            <button type="button" class="risk-announce-btn" data-action="announce-complication" data-count="${newCount}" data-reason="${escapeHtml(reason)}">
+                <i class="fa-solid fa-bullhorn"></i> Announce Complication to Players
+            </button>
+        ` : "";
+
         outcomeBanner = `
             <div class="risk-banner danger">
                 <h4><i class="fa-solid fa-triangle-exclamation"></i> COMPLICATION TRIGGERED!</h4>
@@ -611,9 +669,7 @@ async function postGMRiskRollCard({
                 <p>Something bad happens or conditions escalate.</p>
                 ${wasReset ? '<p style="margin-top:4px;"><em>Risk Dice counter automatically reset to <strong>0</strong>.</em></p>' : ''}
                 ${rollCompBtn}
-                <button type="button" class="risk-announce-btn" data-action="announce-complication" data-count="${newCount}" data-reason="${escapeHtml(reason)}">
-                    <i class="fa-solid fa-bullhorn"></i> Announce Complication to Players
-                </button>
+                ${announceBtn}
             </div>
         `;
     } else {
@@ -626,14 +682,18 @@ async function postGMRiskRollCard({
         `;
     }
 
+    const cardClass = isPublic ? "public" : "gm-secret";
+    const secretBadge = !isPublic ? `<div class="risk-secret-badge"><i class="fa-solid fa-eye-slash"></i> GM Secret Roll</div>` : "";
+
     const content = `
-        <div class="pf2e-risk-card gm-secret">
+        <div class="pf2e-risk-card ${cardClass}">
             <div class="risk-card-header">
                 <i class="fa-solid fa-dice-d6 header-icon"></i>
                 <div class="header-titles">
                     <h3>Risk Dice Roll (${newCount}d${dieFaces})</h3>
                     <div class="subtitle">Triggered by ${actorName}</div>
                 </div>
+                ${secretBadge}
             </div>
             <div class="risk-card-body">
                 ${reasonHtml}
@@ -652,10 +712,13 @@ async function postGMRiskRollCard({
         content: content,
         flavor: `Risk Dice Roll (${newCount}d${dieFaces})`,
         rolls: [roll],
-        whisper: gmRecipients,
-        blind: true
+        whisper: isPublic ? [] : gmRecipients,
+        blind: !isPublic
     });
 }
+
+// Backward-compatibility alias
+export const postGMRiskRollCard = postRiskRollCard;
 
 /**
  * Publicly announces to chat that a complication has erupted.
@@ -887,9 +950,8 @@ export function renderRiskDiceHUD() {
     if (!showHudSetting) return;
 
     const canSeeCount = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeCount"));
-    if (!game.user.isGM && !canSeeCount) return;
-
     const count = getRiskDiceCount();
+    const displayCount = (game.user.isGM || canSeeCount) ? count : "?";
 
     // Create container
     riskHudElement = document.createElement("div");
@@ -938,7 +1000,7 @@ export function renderRiskDiceHUD() {
         <div class="risk-hud-drag-handle" id="risk-hud-handle">
             <i class="fa-solid fa-dice-d6 risk-hud-icon"></i>
             <span class="risk-hud-label">Risk:</span>
-            <span class="risk-hud-badge" id="risk-hud-count-display">${count}</span>
+            <span class="risk-hud-badge" id="risk-hud-count-display">${displayCount}</span>
         </div>
         ${gmButtonsHtml}
     `;
@@ -954,10 +1016,12 @@ export function updateRiskDiceHUD(newCount) {
         renderRiskDiceHUD();
         return;
     }
+    const canSeeCount = Boolean(game.settings.get(MODULE_ID, "riskDicePlayerCanSeeCount"));
     const count = newCount !== undefined ? newCount : getRiskDiceCount();
+    const displayCount = (game.user.isGM || canSeeCount) ? count : "?";
     const countDisplay = riskHudElement.querySelector("#risk-hud-count-display");
     if (countDisplay) {
-        countDisplay.textContent = count;
+        countDisplay.textContent = displayCount;
     }
     const rollBtn = riskHudElement.querySelector("#risk-hud-roll-btn");
     if (rollBtn) {
@@ -1052,9 +1116,8 @@ export function registerRiskDiceSceneControls(controls) {
     } else if (controls && typeof controls === "object") {
         tokenControls = controls.token || Object.values(controls).find(c => c?.name === "token");
     }
-    if (!tokenControls) return;
-
     const count = getRiskDiceCount();
+    const showHud = Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"));
     const toolData = {
         name: "risk-dice-manager",
         title: `Risk Dice (Pool: ${count})`,
@@ -1065,9 +1128,43 @@ export function registerRiskDiceSceneControls(controls) {
         onChange: () => openRiskDiceDialog(),
         callback: () => openRiskDiceDialog()
     };
+    const toggleHudToolData = {
+        name: "risk-dice-toggle-hud",
+        title: `${showHud ? "Hide" : "Show"} Risk Dice Toolbar`,
+        icon: showHud ? "fa-solid fa-eye-slash" : "fa-solid fa-eye",
+        visible: true,
+        button: true,
+        onClick: async () => {
+            await game.settings.set(MODULE_ID, "riskDiceShowHud", !Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud")));
+        }
+    };
+    const riskDiceControls = {
+        name: "risk-dice",
+        title: "Risk Dice",
+        icon: "fa-solid fa-dice-d6",
+        layer: "TokenLayer",
+        tools: {
+            [toggleHudToolData.name]: toggleHudToolData
+        }
+    };
+
+    if (Array.isArray(controls)) {
+        const existingIdx = controls.findIndex(control => control?.name === "risk-dice");
+        if (existingIdx >= 0) {
+            controls[existingIdx] = riskDiceControls;
+        } else {
+            controls.push(riskDiceControls);
+        }
+    } else if (controls instanceof Map || typeof controls?.set === "function") {
+        controls.set("risk-dice", riskDiceControls);
+    } else if (controls && typeof controls === "object") {
+        controls["risk-dice"] = riskDiceControls;
+    }
+
+    if (!tokenControls) return;
 
     if (Array.isArray(tokenControls.tools)) {
-        const existingIdx = tokenControls.tools.findIndex(t => t?.name === "risk-dice-manager");
+        const existingIdx = tokenControls.tools.findIndex(t => t?.name === toolData.name);
         if (existingIdx >= 0) {
             tokenControls.tools[existingIdx] = toolData;
         } else {
@@ -1234,3 +1331,23 @@ export function registerRiskDiceChatListeners() {
         }
     });
 }
+
+/* ------------------------------------------------------------------------- */
+/* 10. SETTINGS CONFIG UI ENHANCEMENT                                        */
+/* ------------------------------------------------------------------------- */
+
+Hooks.on("renderSettingsConfig", (app, html) => {
+    const root = html instanceof HTMLElement ? html : (html[0] || document);
+    const input = root.querySelector?.(`input[name="${MODULE_ID}.riskDiceComplicationTableEntries"]`);
+    if (input) {
+        const textarea = document.createElement("textarea");
+        textarea.name = input.name;
+        textarea.value = input.value;
+        textarea.rows = 5;
+        textarea.style.fontFamily = "var(--font-mono, monospace)";
+        textarea.style.resize = "vertical";
+        textarea.style.width = "100%";
+        textarea.placeholder = "1-10: Wandering Monsters\n11-15: Environmental Hazard\n16-20: Injury";
+        input.replaceWith(textarea);
+    }
+});

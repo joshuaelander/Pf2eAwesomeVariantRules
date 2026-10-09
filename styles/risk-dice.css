@@ -59,6 +59,22 @@
     letter-spacing: 1px;
 }
 
+.risk-secret-badge {
+    font-size: 0.72em;
+    background: rgba(184, 45, 45, 0.45);
+    border: 1px solid #b82d2d;
+    color: #ffcccc;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
 /* Card Body */
 .risk-card-body {
     font-size: 0.95em;
@@ -513,4 +529,10 @@
     width: 60px;
     height: 30px;
     font-weight: bold;
+}
+
+/* --- 6. USER PERMISSION SAFEGUARDS --- */
+/* Hide GM action buttons (Roll Complication, Announce, etc.) from players */
+body:not(.gamemaster) .pf2e-risk-card button {
+    display: none !important;
 }

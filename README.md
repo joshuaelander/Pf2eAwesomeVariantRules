@@ -21,30 +21,32 @@ A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
 - **Core Loop**: Every time the party takes time in a dangerous area, makes loud noise, forces locks, or loots recklessly, the Risk Dice pool increases by 1 die and is secretly rolled (Nd6).
 - **Complications**: If **any** die in the roll turns up a **1**, a complication occurs (tension snaps) and the pool automatically resets to 0! If no 1s are rolled, the party is safe for now and the pool holds at N dice (so the next risk will roll (N+1)d6).
 - **Player & GM Flow**:
-  - Players (or GM) can click the **Take a Risk** macro button (or hold Shift to describe what they are doing).
-  - A public suspense card announces the current pool size and that a secret roll was made.
-  - The roll result is sent as a **Blind GM Roll** to the Game Master, with all complication 1s highlighted with red glowing badges.
-  - The GM card includes an **Announce Complication to Players** button to reveal the consequences at the right narrative beat.
-- **GM Visibility**:
-  - **On-Screen HUD**: A draggable widget displaying the current count with quick-action buttons (`+1 & Roll`, `Roll Pool`, `Reset`, `Manager Dialog`).
-  - **Scene Controls**: A tool button in the Token Layer toolbar showing the live count.
-  - **Risk Dice Manager Dialog**: Accessible via macro or HUD to manually adjust, add, or roll dice at will.
+  - Players (or GM) can click the **Take a Risk** macro button or the on-screen HUD button (hold Shift to specify an activity description).
+  - Synchronized across the network via native Foundry sockets directly to the active Game Master.
+  - If **Players Can See Dice Roll** is enabled in settings, the full roll card and outcome banner are displayed publicly to all players.
+  - If rolls are kept secret to the GM, a suspense card announces that a risk was taken, while the roll result is sent as a **Blind GM Roll** to the Game Master with glowing complication dice badges and an **Announce Complication to Players** button.
+- **HUD & Toolbar Visibility**:
+  - **On-Screen Floating HUD**: A draggable widget displaying current Risk Dice with quick-action buttons.
+  - **Player Count Privacy**: If "Players Can See Dice Count" is disabled by the GM, the floating HUD remains visible to players for taking risks, but displays `?` instead of the numeric count.
+  - **Scene Controls**: A tool button in the Token Layer toolbar showing the live count for the GM.
+  - **Risk Dice Manager Dialog**: Accessible via macro, toolbar, or HUD to manually adjust, add, or roll dice at will.
 - **Complication Roll Table (Optional)**:
   - When a complication occurs, GMs (or players) can roll on a d20 complication table to determine what consequence strikes the party.
-  - Can be triggered directly from the **GM Secret Risk Card**, via the **Roll Complication** macro, or inside the **Risk Dice Manager**.
-  - Fully customizable ranges in module settings (e.g. `1-10: Hostile Patrol`, `11-15: Environmental Hazard`, `16-20: Party sustains an injury`).
+  - Can be triggered directly from the **Risk Card**, via the **Roll Complication** macro, or inside the **Risk Dice Manager**.
+  - Fully customizable ranges in module settings with a multiline text area (separated by newlines or semicolons, e.g. `1-10: Hostile Patrol; 11-15: Environmental Hazard; 16-20: Party sustains an injury`).
   - Supports linking directly to an existing Foundry World RollTable by name/UUID.
-  - Results are whispered secretly to the GM by default (with a one-click button to reveal to players), or can be set to public in settings.
+  - Results can be whispered secretly to the GM by default (with a one-click button to reveal to players), or configured to show publicly.
 - **Configurable Settings**:
   - Enable/disable the variant rule.
   - Custom die face (d6 default, d4, d8, d10, d12, d20).
   - Custom complication target number (default 1).
+  - **Players Can See Dice Roll**: Toggle whether players see the actual dice rolls and result cards or if they stay secret to the GM.
+  - **Players Can See Dice Count**: Allow players to see the numeric count, or hide it with a `?` badge on their HUD and announcements.
   - Public chat announcement toggle.
   - Show/hide floating HUD widget.
-  - Player dice count visibility toggle.
   - Enable/disable Complication Roll Table.
   - Complication die formula (default `1d20`).
-  - Complication table ranges and descriptions.
+  - Complication table ranges and descriptions (multiline editor).
   - Optional Foundry RollTable link.
   - Show complication results to players toggle.
 

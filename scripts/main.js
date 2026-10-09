@@ -155,8 +155,9 @@ Hooks.once('init', () => {
         default: true
     });
 
-    // Register Risk Dice (Tension Dice) Settings
+    // Register Risk Dice (Tension Dice) Settings & Sockets
     registerRiskDiceSettings();
+    registerRiskDiceSockets();
 });
 
 // Scene Controls Integration (Risk Dice GM tool)
