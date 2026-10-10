@@ -14,7 +14,7 @@ Contents:
 10. Spell Runes (TBD)
 11. Risk Dice / Tension Dice (Done)
 12. Sanity Dice (TBD)
-13. Spellcasting Modifiers (TBD)
+13. Spellcasting Modifiers (Done)
 
 ### Risk Dice (Tension Dice Variant)
 A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
@@ -49,6 +49,31 @@ A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
   - Complication table ranges and descriptions (multiline editor).
   - Optional Foundry RollTable link.
   - Show complication results to players toggle.
+
+### Spellcasting Damage Modifier Variant
+A variant rule that empowers spellcasters and kineticists by adding a bonus to damage rolls equal to half their primary spellcasting modifier:
+- **Core Mechanic**: Whenever a character rolls damage for a class spell or kineticist impulse, they receive an **untyped bonus** equal to `floor(modifier / 2)` of their primary attribute (e.g. +3 mod \u2192 +1 bonus, +4 mod \u2192 +2 bonus, +6 mod \u2192 +3 bonus).
+- **Class Spells Only (Archetype Exclusion)**: Spells gained through Free Archetype or archetype dedications are excluded from this bonus to maintain class identity and prevent archetype power creep.
+- **Auto-Detection**:
+  - Automatically identifies the character's primary spellcasting class:
+    - **Wizard / Witch / Magus**: Intelligence (INT)
+    - **Sorcerer / Bard / Oracle / Summoner**: Charisma (CHA)
+    - **Cleric / Druid / Animist**: Wisdom (WIS)
+    - **Kineticist**: Constitution (CON) for elemental impulses
+    - **Psychic**: Chosen subconscious mind key attribute (INT or CHA)
+- **Character Sheet Configuration**:
+  - In the **Spellcasting** tab (and **Actions** tab for Kineticists), a compact status and control bar is displayed when the setting is enabled.
+  - Matches native Pathfinder 2e parchment and crimson-red styling with minimal vertical profile.
+  - **Enable/Disable Checkbox**: Easily turn the bonus on or off per character.
+  - **Governing Attribute Selector**: Supports `Auto-Detect`, single attributes (`INT`, `WIS`, `CHA`, `CON`), universal mode, and **Dual-Class configurations** (`INT & WIS`, `INT & CHA`, `WIS & CHA`, `CON & INT`, etc.).
+  - **Live Damage Indicator**: Displays the current calculated bonus in real time directly on the character sheet.
+- **Full Roll Integration**:
+  - Seamlessly integrates with native PF2e spell and impulse damage rolls (appears in the breakdown on chat damage cards).
+  - Fully compatible with the module's **Split Dice Damage** feature.
+- **Configurable Settings**:
+  - Enable/disable the variant rule globally in module settings.
+  - Toggle inclusion of Kineticist impulses (enabled by default).
+  - Restrict to class spells only toggle (enabled by default).
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
 

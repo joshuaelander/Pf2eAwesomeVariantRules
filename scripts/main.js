@@ -17,6 +17,12 @@ import { registerSplitDamageCardButtons, convertSpellDiceFormula } from './split
 import { registerSplitHealingCardButtons, convertHealingDiceFormula, rollSplitHealingFormula, triggerNativeInlineDamageRoll, promptSplitHealingDialog } from './split-healing.js';
 import { convertDiceFormula } from './dice-utils.js';
 import {
+    registerSpellDamageSettings,
+    initSpellDamageModifier,
+    getActorSpellDamageConfig,
+    calculateHalfModifier
+} from './spell-damage-modifier.js';
+import {
     registerRiskDiceSettings,
     registerRiskDiceSockets,
     registerRiskDiceChatListeners,
@@ -158,6 +164,9 @@ Hooks.once('init', () => {
     // Register Risk Dice (Tension Dice) Settings & Sockets
     registerRiskDiceSettings();
     registerRiskDiceSockets();
+
+    // Register Spellcasting Damage Modifier Variant Settings
+    registerSpellDamageSettings();
 });
 
 // Scene Controls Integration (Risk Dice GM tool)
@@ -198,6 +207,11 @@ Hooks.once('ready', async () => {
     registerRiskDiceSockets();
     registerRiskDiceChatListeners();
     initRiskDiceHUD();
+
+    // Initialize Spellcasting Damage Modifier Variant
+    initSpellDamageModifier();
+    game.pf2eAwesomeVariantRules.getSpellDamageConfig = getActorSpellDamageConfig;
+    game.pf2eAwesomeVariantRules.calculateHalfSpellDamageMod = calculateHalfModifier;
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";
