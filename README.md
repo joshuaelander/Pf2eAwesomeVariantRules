@@ -9,7 +9,7 @@ Contents:
 5. Improved Learn-a-Spell (Done)
 6. Split Dice Variant - Alternate Spell Damage / Healing Calculation (Done)
 7. Improved Hero Points (Requires Pf2eImprovedHeroPoints)
-8. Improved Wounded Recovery (Requires Pf2eImprovedHeroPoints)
+8. Improved Wounded Recovery (Requires Pf2eImprovedHeroPoints, uses injury roll check)
 9. Half Price Consumables (TBD)
 10. Spell Runes (TBD)
 11. Risk Dice / Tension Dice (Done)

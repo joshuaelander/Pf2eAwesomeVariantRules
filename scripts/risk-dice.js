@@ -45,8 +45,12 @@ export function registerRiskDiceSettings() {
         config: true,
         type: Boolean,
         default: true,
-        onChange: () => {
-            updateRiskDiceHUD();
+        onChange: (enabled) => {
+            if (enabled && Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"))) {
+                renderRiskDiceHUD();
+            } else {
+                hideRiskDiceHUD();
+            }
             setTimeout(() => {
                 if (ui.controls?.rendered) ui.controls.render();
             }, 0);
@@ -118,8 +122,12 @@ export function registerRiskDiceSettings() {
         config: true,
         type: Boolean,
         default: true,
-        onChange: () => {
-            updateRiskDiceHUD();
+        onChange: (show) => {
+            if (show && isRiskDiceEnabled()) {
+                renderRiskDiceHUD();
+            } else {
+                hideRiskDiceHUD();
+            }
             if (ui.controls?.rendered) ui.controls.render();
         }
     });
@@ -937,12 +945,44 @@ export function initRiskDiceHUD() {
     renderRiskDiceHUD();
 }
 
-export function renderRiskDiceHUD() {
-    // Clean up existing HUD if present
+export function hideRiskDiceHUD() {
     if (riskHudElement) {
         riskHudElement.remove();
         riskHudElement = null;
     }
+    const elements = document.querySelectorAll("#pf2e-risk-dice-hud");
+    elements.forEach(el => el.remove());
+}
+
+export function showRiskDiceHUD() {
+    renderRiskDiceHUD();
+}
+
+let isTogglingHud = false;
+export async function toggleRiskDiceHUD(forceState) {
+    if (isTogglingHud) return;
+    isTogglingHud = true;
+    try {
+        const current = Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"));
+        const target = forceState !== undefined ? Boolean(forceState) : !current;
+        await game.settings.set(MODULE_ID, "riskDiceShowHud", target);
+        if (target && isRiskDiceEnabled()) {
+            renderRiskDiceHUD();
+        } else {
+            hideRiskDiceHUD();
+        }
+        if (ui.controls?.rendered) ui.controls.render();
+        return target;
+    } finally {
+        setTimeout(() => {
+            isTogglingHud = false;
+        }, 150);
+    }
+}
+
+export function renderRiskDiceHUD() {
+    // Clean up existing HUD if present
+    hideRiskDiceHUD();
 
     if (!isRiskDiceEnabled()) return;
 
@@ -987,11 +1027,17 @@ export function renderRiskDiceHUD() {
             <button type="button" class="risk-hud-btn" id="risk-hud-settings-btn" title="Open Risk Dice Manager">
                 <i class="fa-solid fa-gear"></i>
             </button>
+            <button type="button" class="risk-hud-btn" id="risk-hud-close-btn" title="Hide Risk Dice HUD">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </div>
     ` : `
         <div class="risk-hud-actions">
             <button type="button" class="risk-hud-btn take-risk-btn" id="risk-hud-take-btn" title="Take a Risk">
                 <i class="fa-solid fa-plus"></i>
+            </button>
+            <button type="button" class="risk-hud-btn" id="risk-hud-close-btn" title="Hide Risk Dice HUD">
+                <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
     `;
@@ -1012,7 +1058,13 @@ export function renderRiskDiceHUD() {
 }
 
 export function updateRiskDiceHUD(newCount) {
-    if (!riskHudElement) {
+    const shouldShow = isRiskDiceEnabled() && Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"));
+    if (!shouldShow) {
+        hideRiskDiceHUD();
+        return;
+    }
+
+    if (!riskHudElement || !document.body.contains(riskHudElement)) {
         renderRiskDiceHUD();
         return;
     }
@@ -1095,7 +1147,11 @@ function attachHudListeners(hud) {
     });
 
     hud.querySelector("#risk-hud-settings-btn")?.addEventListener("click", () => {
-        openRiskDiceDialog();
+        toggleRiskDiceDialog();
+    });
+
+    hud.querySelector("#risk-hud-close-btn")?.addEventListener("click", async () => {
+        await toggleRiskDiceHUD(false);
     });
 }
 
@@ -1105,50 +1161,56 @@ function attachHudListeners(hud) {
 
 export function registerRiskDiceSceneControls(controls) {
     if (!isRiskDiceEnabled()) return;
-    if (!game.user.isGM) return;
 
-    // Support Array (v12 and earlier), Map/Collection, or Record/Object (v13/v14)
-    let tokenControls = null;
-    if (Array.isArray(controls)) {
-        tokenControls = controls.find(c => c?.name === "token");
-    } else if (controls instanceof Map || typeof controls?.get === "function") {
-        tokenControls = controls.get("token");
-    } else if (controls && typeof controls === "object") {
-        tokenControls = controls.token || Object.values(controls).find(c => c?.name === "token");
-    }
+    const isGM = Boolean(game.user.isGM);
     const count = getRiskDiceCount();
     const showHud = Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"));
+
     const toolData = {
         name: "risk-dice-manager",
         title: `Risk Dice (Pool: ${count})`,
         icon: "fa-solid fa-dice-d6",
-        visible: true,
+        visible: isGM,
         button: true,
-        onClick: () => openRiskDiceDialog(),
-        onChange: () => openRiskDiceDialog(),
-        callback: () => openRiskDiceDialog()
+        order: 0,
+        onClick: () => toggleRiskDiceDialog(),
+        onChange: () => toggleRiskDiceDialog(),
+        callback: () => toggleRiskDiceDialog()
     };
+
     const toggleHudToolData = {
         name: "risk-dice-toggle-hud",
-        title: `${showHud ? "Hide" : "Show"} Risk Dice Toolbar`,
+        title: `${showHud ? "Hide" : "Show"} Risk Dice HUD`,
         icon: showHud ? "fa-solid fa-eye-slash" : "fa-solid fa-eye",
         visible: true,
         button: true,
-        onClick: async () => {
-            await game.settings.set(MODULE_ID, "riskDiceShowHud", !Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud")));
-        }
+        order: 1,
+        onClick: () => toggleRiskDiceHUD(),
+        onChange: () => toggleRiskDiceHUD(),
+        callback: () => toggleRiskDiceHUD()
     };
+
+    const isArrayControls = Array.isArray(controls);
+    const activeTools = isGM ? [toolData, toggleHudToolData] : [toggleHudToolData];
+    const toolsRecord = isGM
+        ? {
+            [toolData.name]: toolData,
+            [toggleHudToolData.name]: toggleHudToolData
+        }
+        : {
+            [toggleHudToolData.name]: toggleHudToolData
+        };
+
     const riskDiceControls = {
         name: "risk-dice",
         title: "Risk Dice",
         icon: "fa-solid fa-dice-d6",
         layer: "TokenLayer",
-        tools: {
-            [toggleHudToolData.name]: toggleHudToolData
-        }
+        visible: true,
+        tools: isArrayControls ? activeTools : toolsRecord
     };
 
-    if (Array.isArray(controls)) {
+    if (isArrayControls) {
         const existingIdx = controls.findIndex(control => control?.name === "risk-dice");
         if (existingIdx >= 0) {
             controls[existingIdx] = riskDiceControls;
@@ -1160,21 +1222,6 @@ export function registerRiskDiceSceneControls(controls) {
     } else if (controls && typeof controls === "object") {
         controls["risk-dice"] = riskDiceControls;
     }
-
-    if (!tokenControls) return;
-
-    if (Array.isArray(tokenControls.tools)) {
-        const existingIdx = tokenControls.tools.findIndex(t => t?.name === toolData.name);
-        if (existingIdx >= 0) {
-            tokenControls.tools[existingIdx] = toolData;
-        } else {
-            tokenControls.tools.push(toolData);
-        }
-    } else if (tokenControls.tools instanceof Map || typeof tokenControls.tools?.set === "function") {
-        tokenControls.tools.set("risk-dice-manager", toolData);
-    } else if (tokenControls.tools && typeof tokenControls.tools === "object") {
-        tokenControls.tools["risk-dice-manager"] = toolData;
-    }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1182,6 +1229,36 @@ export function registerRiskDiceSceneControls(controls) {
 /* ------------------------------------------------------------------------- */
 
 let activeManagerDialog = null;
+let isTogglingDialog = false;
+
+export function isManagerDialogOpen() {
+    return Boolean(activeManagerDialog && (activeManagerDialog.rendered || (activeManagerDialog.element && activeManagerDialog.element.length > 0)));
+}
+
+export function closeRiskDiceDialog() {
+    if (activeManagerDialog) {
+        try {
+            activeManagerDialog.close();
+        } catch {}
+        activeManagerDialog = null;
+    }
+}
+
+export function toggleRiskDiceDialog() {
+    if (isTogglingDialog) return;
+    isTogglingDialog = true;
+    try {
+        if (isManagerDialogOpen()) {
+            closeRiskDiceDialog();
+        } else {
+            openRiskDiceDialog();
+        }
+    } finally {
+        setTimeout(() => {
+            isTogglingDialog = false;
+        }, 150);
+    }
+}
 
 function updateOpenManagerDialog(count) {
     if (activeManagerDialog && activeManagerDialog.element && activeManagerDialog.element.length) {
@@ -1196,6 +1273,14 @@ export function openRiskDiceDialog() {
     if (!game.user.isGM) {
         ui.notifications.warn("Only the Game Master can open the Risk Dice Manager.");
         return;
+    }
+
+    if (isManagerDialogOpen()) {
+        try {
+            activeManagerDialog.bringToTop?.();
+            activeManagerDialog.element?.focus?.();
+        } catch {}
+        return activeManagerDialog;
     }
 
     const count = getRiskDiceCount();

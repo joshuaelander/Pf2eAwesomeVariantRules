@@ -30,6 +30,9 @@ import {
     initRiskDiceHUD,
     takeRisk,
     openRiskDiceDialog,
+    toggleRiskDiceDialog,
+    closeRiskDiceDialog,
+    isManagerDialogOpen,
     getRiskDiceCount,
     setRiskDiceCount,
     resetRiskDice,
@@ -41,7 +44,12 @@ import {
     RISK_MANAGER_MACRO_ICON,
     ROLL_COMPLICATION_MACRO_NAME,
     ROLL_COMPLICATION_MACRO_ICON,
-    rollComplication
+    rollComplication,
+    toggleRiskDiceHUD,
+    hideRiskDiceHUD,
+    showRiskDiceHUD,
+    renderRiskDiceHUD,
+    updateRiskDiceHUD
 } from './risk-dice.js';
 
 // --- 2. THE DESIRED MACRO STATE ---
@@ -192,12 +200,20 @@ Hooks.once('ready', async () => {
     // Risk Dice Global API
     game.pf2eAwesomeVariantRules.takeRisk = takeRisk;
     game.pf2eAwesomeVariantRules.openRiskDiceDialog = openRiskDiceDialog;
+    game.pf2eAwesomeVariantRules.toggleRiskDiceDialog = toggleRiskDiceDialog;
+    game.pf2eAwesomeVariantRules.closeRiskDiceDialog = closeRiskDiceDialog;
+    game.pf2eAwesomeVariantRules.isManagerDialogOpen = isManagerDialogOpen;
     game.pf2eAwesomeVariantRules.getRiskDiceCount = getRiskDiceCount;
     game.pf2eAwesomeVariantRules.setRiskDiceCount = setRiskDiceCount;
     game.pf2eAwesomeVariantRules.resetRiskDice = resetRiskDice;
     game.pf2eAwesomeVariantRules.modifyRiskDiceCount = modifyRiskDiceCount;
     game.pf2eAwesomeVariantRules.rollCurrentPool = executeCurrentPoolRoll;
     game.pf2eAwesomeVariantRules.rollComplication = rollComplication;
+    game.pf2eAwesomeVariantRules.toggleRiskDiceHUD = toggleRiskDiceHUD;
+    game.pf2eAwesomeVariantRules.hideRiskDiceHUD = hideRiskDiceHUD;
+    game.pf2eAwesomeVariantRules.showRiskDiceHUD = showRiskDiceHUD;
+    game.pf2eAwesomeVariantRules.renderRiskDiceHUD = renderRiskDiceHUD;
+    game.pf2eAwesomeVariantRules.updateRiskDiceHUD = updateRiskDiceHUD;
 
     // Initialize Chat Card Buttons
     registerSplitDamageCardButtons();

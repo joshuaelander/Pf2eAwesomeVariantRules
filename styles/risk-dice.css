@@ -431,6 +431,12 @@
     color: #ffffff;
 }
 
+#risk-hud-close-btn:hover {
+    background: rgba(184, 45, 45, 0.6);
+    border-color: #e04338;
+    color: #ffffff;
+}
+
 
 /* --- 3. RISK DICE MANAGER DIALOG --- */
 
