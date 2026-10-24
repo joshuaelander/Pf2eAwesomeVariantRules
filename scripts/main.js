@@ -65,8 +65,8 @@ const DESIRED_MACROS = [
 
 // --- 3. HELPER FUNCTIONS ---
 
-async function getOrCreateFolder(name, type) {
-    let folder = game.folders.getName(name);
+async function getOrCreateFolder(name, type = "Macro") {
+    let folder = game.folders.find(f => f.name === name && f.type === type);
 
     if (!folder) {
         try {
@@ -87,15 +87,18 @@ async function getOrCreateFolder(name, type) {
 /**
  * Compares the existing macros in the world to the DESIRED_MACROS list.
  * Creates missing macros, updates existing ones, and deletes obsolete ones.
+ * Macros are placed in the "PF2e Awesome Variant Rules" folder and hidden from
+ * players by default (ownership = NONE) so the GM can choose when to grant access.
  */
-async function syncMacros() {
+export async function syncMacros({ notify = false } = {}) {
     const folder = await getOrCreateFolder(MACRO_FOLDER_NAME, 'Macro');
     if (!folder) return;
 
     // Find all macros currently in the world that belong to this module
     const existingMacros = game.macros.filter(m => m.flags?.[MODULE_ID]?.isModuleMacro);
     const desiredNames = DESIRED_MACROS.map(m => m.name);
-    const observerOwnership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER };
+    // Hidden from players by default (NONE = 0)
+    const hiddenOwnership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS?.NONE ?? 0 };
 
     // 1. Delete Obsolete Macros (Exists in world, but no longer in DESIRED_MACROS)
     const obsoleteIds = existingMacros.filter(m => !desiredNames.includes(m.name)).map(m => m.id);
@@ -109,32 +112,36 @@ async function syncMacros() {
     let updatedCount = 0;
 
     for (const desired of DESIRED_MACROS) {
-        const existing = existingMacros.find(m => m.name === desired.name);
+        // Find existing macro by flag first, or fallback by name + module command/folder
+        const existing = game.macros.find(m => m.flags?.[MODULE_ID]?.isModuleMacro && m.name === desired.name)
+            || game.macros.find(m => m.name === desired.name && (m.folder?.id === folder.id || m.command?.includes("game.pf2eAwesomeVariantRules")));
 
         if (existing) {
-            // If it exists, ensure the code, icon, folder, and ownership permissions are up to date
-            if (existing.command !== desired.command ||
-                existing.img !== desired.icon ||
-                existing.folder?.id !== folder.id ||
-                existing.ownership?.default !== observerOwnership.default) {
+            const updates = {};
+            if (existing.command !== desired.command) updates.command = desired.command;
+            if (existing.img !== desired.icon) updates.img = desired.icon;
+            if (existing.folder?.id !== folder.id) updates.folder = folder.id;
+            // If the macro was previously set to OBSERVER by older versions, hide it by default
+            if (existing.ownership?.default === (CONST.DOCUMENT_OWNERSHIP_LEVELS?.OBSERVER ?? 2)) {
+                updates.ownership = hiddenOwnership;
+            }
+            if (!existing.flags?.[MODULE_ID]?.isModuleMacro) {
+                updates[`flags.${MODULE_ID}.isModuleMacro`] = true;
+            }
 
-                await existing.update({
-                    command: desired.command,
-                    img: desired.icon,
-                    folder: folder.id,
-                    ownership: observerOwnership
-                });
+            if (Object.keys(updates).length > 0) {
+                await existing.update(updates);
                 updatedCount++;
             }
         } else {
-            // If it doesn't exist, create it from scratch
+            // If it doesn't exist, create it from scratch in the module folder, hidden from players by default
             const macroData = {
                 name: desired.name,
                 type: "script",
                 img: desired.icon,
                 command: desired.command,
                 folder: folder.id,
-                ownership: observerOwnership,
+                ownership: hiddenOwnership,
                 flags: { [MODULE_ID]: { isModuleMacro: true } }
             };
             await Macro.create(macroData, { renderSheet: false });
@@ -142,8 +149,8 @@ async function syncMacros() {
         }
     }
 
-    if (createdCount > 0 || updatedCount > 0) {
-        ui.notifications.info(`[PF2e Awesome Variant Rules] Sync complete! Created: ${createdCount}, Updated: ${updatedCount}.`);
+    if (createdCount > 0 || updatedCount > 0 || notify) {
+        ui.notifications.info(`[PF2e Awesome Variant Rules] Macro sync complete! Created: ${createdCount}, Updated: ${updatedCount}.`);
     }
 }
 
@@ -175,6 +182,28 @@ Hooks.once('init', () => {
 
     // Register Spellcasting Damage Modifier Variant Settings
     registerSpellDamageSettings();
+
+    // Setting Menu to manually re-sync macros
+    game.settings.registerMenu(MODULE_ID, "syncMacrosMenu", {
+        name: "Recreate / Sync Macros",
+        label: "Recreate Missing Macros",
+        hint: "Checks for and recreates any deleted or missing macros in the 'PF2e Awesome Variant Rules' folder.",
+        icon: "fa-solid fa-arrows-rotate",
+        type: class extends FormApplication {
+            static get defaultOptions() {
+                return foundry.utils.mergeObject(super.defaultOptions, {
+                    id: "pf2e-avr-macro-sync-dialog",
+                    title: "Sync Macros",
+                    template: false
+                });
+            }
+            async render() {
+                await syncMacros({ notify: true });
+                return this;
+            }
+        },
+        restricted: true
+    });
 });
 
 // Scene Controls Integration (Risk Dice GM tool)
@@ -196,6 +225,9 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.convertHealingDiceFormula = convertHealingDiceFormula;
     game.pf2eAwesomeVariantRules.rollSplitHealingFormula = rollSplitHealingFormula;
     game.pf2eAwesomeVariantRules.promptSplitHealingDialog = promptSplitHealingDialog;
+
+    // Macro Synchronization API
+    game.pf2eAwesomeVariantRules.syncMacros = syncMacros;
 
     // Risk Dice Global API
     game.pf2eAwesomeVariantRules.takeRisk = takeRisk;
@@ -231,15 +263,23 @@ Hooks.once('ready', async () => {
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";
-        let folder = game.folders.getName(MACRO_FOLDER_NAME);
+        let folder = game.folders.find(f => f.name === MACRO_FOLDER_NAME && f.type === "Macro");
         const storedVersion = folder ? folder.getFlag(MODULE_ID, "moduleVersion") : null;
 
-        // Run the Smart Sync if the version has changed
-        if (currentVersion !== storedVersion) {
+        // Check if any desired macro is missing from the world, misplaced, or exposed to players
+        const existingModuleMacros = game.macros.filter(m => m.flags?.[MODULE_ID]?.isModuleMacro);
+        const hasMissingMacros = DESIRED_MACROS.some(desired =>
+            !existingModuleMacros.some(m => m.name === desired.name)
+        );
+        const hasMisplacedMacros = folder && existingModuleMacros.some(m => m.folder?.id !== folder.id);
+        const hasVisibleToPlayersMacros = existingModuleMacros.some(m => m.ownership?.default === (CONST.DOCUMENT_OWNERSHIP_LEVELS?.OBSERVER ?? 2));
+
+        // Run the Smart Sync if version changed, folder missing, or macros were deleted, misplaced, or exposed
+        if (!folder || currentVersion !== storedVersion || hasMissingMacros || hasMisplacedMacros || hasVisibleToPlayersMacros) {
             await syncMacros();
 
             // Re-fetch the folder just in case it was created during the sync
-            folder = game.folders.getName(MACRO_FOLDER_NAME);
+            folder = game.folders.find(f => f.name === MACRO_FOLDER_NAME && f.type === "Macro");
             if (folder) {
                 await folder.setFlag(MODULE_ID, "moduleVersion", currentVersion);
             }
