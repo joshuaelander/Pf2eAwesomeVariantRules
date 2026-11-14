@@ -41,7 +41,7 @@ export function registerSpellDamageSettings() {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true,
+        default: false,
         onChange: () => {
             // Re-render open sheets and refresh actor synthetics
             for (const app of Object.values(ui.windows)) {
@@ -56,7 +56,7 @@ export function registerSpellDamageSettings() {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true
+        default: false
     });
 
     game.settings.register(MODULE_ID, "spellDamageModifierRestrictToClass", {
@@ -65,7 +65,7 @@ export function registerSpellDamageSettings() {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true
+        default: false
     });
 }
 

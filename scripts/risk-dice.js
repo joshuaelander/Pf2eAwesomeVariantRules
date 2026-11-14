@@ -44,7 +44,7 @@ export function registerRiskDiceSettings() {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true,
+        default: false,
         onChange: (enabled) => {
             if (enabled && Boolean(game.settings.get(MODULE_ID, "riskDiceShowHud"))) {
                 renderRiskDiceHUD();

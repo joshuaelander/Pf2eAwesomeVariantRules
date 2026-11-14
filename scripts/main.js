@@ -164,7 +164,7 @@ Hooks.once('init', () => {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true
+        default: false
     });
 
     game.settings.register(MODULE_ID, "splitHealingEnabled", {
@@ -173,7 +173,7 @@ Hooks.once('init', () => {
         scope: "world",
         config: true,
         type: Boolean,
-        default: true
+        default: false
     });
 
     // Register Risk Dice (Tension Dice) Settings & Sockets
