@@ -13,6 +13,8 @@
 
 const MODULE_ID = "pf2e-awesome-variant-rules";
 
+import { isDualClassEnabled, getSecondaryClassData, getSecondaryClassKeyAbility } from './dual-class.js';
+
 /**
  * Mapping of standard PF2e classes to their primary spellcasting/impulse attribute.
  */
@@ -84,34 +86,81 @@ export function calculateHalfModifier(actor, abilityKey) {
 }
 
 /**
- * Auto-detect the primary class attribute for a character actor.
- * 
- * @param {ActorPF2e} actor 
- * @returns {{ attribute: string, className: string, isSpellcasterOrKineticist: boolean }}
+ * Resolve a single class item (or class itemData snapshot) to its spellcasting/impulse attribute if applicable.
+ * @param {object|null} classItem
+ * @param {Actor} actor
+ * @param {string|null} [overrideKeyAttr]
+ * @returns {{ attribute: string, className: string, isSpellcasterOrKineticist: boolean }|null}
  */
-export function autoDetectClassAttribute(actor) {
-    if (!actor || actor.type !== "character") {
-        return { attribute: "int", className: "", isSpellcasterOrKineticist: false };
-    }
+function detectAttributeFromClassObject(classItem, actor, overrideKeyAttr = null) {
+    if (!classItem) return null;
+    const classSlug = (classItem.system?.slug || classItem.slug || classItem.name || "").toLowerCase().replace(/\s+/g, "-");
+    const className = classItem.name || "";
 
-    const classItem = actor.class;
-    const classSlug = (classItem?.slug || classItem?.name || "").toLowerCase().replace(/\s+/g, "-");
-    const className = classItem?.name || "";
-
-    // Check direct class mapping
     if (CLASS_PRIMARY_ATTRIBUTES[classSlug]) {
         let attr = CLASS_PRIMARY_ATTRIBUTES[classSlug];
-
-        // Psychic special case: can be INT or CHA
         if (classSlug === "psychic") {
-            const keyAttr = classItem?.system?.keyAttribute?.[0] || actor.system.details?.keyability?.value;
+            const keyAttr = overrideKeyAttr
+                || classItem.system?.keyAbility?.value?.[0]
+                || classItem.system?.keyAttribute?.[0]
+                || actor.system.details?.keyability?.value;
             if (keyAttr === "cha" || keyAttr === "int") {
                 attr = keyAttr;
             }
         }
-
         return { attribute: attr, className, isSpellcasterOrKineticist: true };
     }
+
+    return null;
+}
+
+/**
+ * Auto-detect the primary (and optional Dual Class secondary) spellcasting/impulse attribute(s) for a character actor.
+ * 
+ * @param {ActorPF2e} actor 
+ * @returns {{ attribute: string, attributes: string[], className: string, isSpellcasterOrKineticist: boolean }}
+ */
+export function autoDetectClassAttribute(actor) {
+    if (!actor || actor.type !== "character") {
+        return { attribute: "int", attributes: ["int"], className: "", isSpellcasterOrKineticist: false };
+    }
+
+    const detectedAttrs = [];
+    const detectedNames = [];
+
+    // 1. Check Primary Class
+    const primaryHit = detectAttributeFromClassObject(actor.class, actor);
+    if (primaryHit) {
+        detectedAttrs.push(primaryHit.attribute);
+        detectedNames.push(primaryHit.className);
+    }
+
+    // 2. Check Dual Class Secondary Class (if Dual Class variant is enabled)
+    if (isDualClassEnabled()) {
+        const dualData = getSecondaryClassData(actor);
+        if (dualData?.itemData) {
+            const keyInfo = getSecondaryClassKeyAbility(actor, dualData);
+            const secondaryHit = detectAttributeFromClassObject(dualData.itemData, actor, keyInfo.selected);
+            if (secondaryHit) {
+                if (!detectedAttrs.includes(secondaryHit.attribute)) {
+                    detectedAttrs.push(secondaryHit.attribute);
+                }
+                detectedNames.push(secondaryHit.className);
+            }
+        }
+    }
+
+    if (detectedAttrs.length > 0) {
+        return {
+            attribute: detectedAttrs[0],
+            attributes: detectedAttrs,
+            className: detectedNames.join(" / "),
+            isSpellcasterOrKineticist: true
+        };
+    }
+
+    const classItem = actor.class;
+    const className = classItem?.name || "";
 
     // Check if class has key attribute defined in system data
     const keyAttr = classItem?.system?.keyAttribute?.[0] || actor.system.details?.keyability?.value;
@@ -119,7 +168,7 @@ export function autoDetectClassAttribute(actor) {
         const hasSpellcasting = (actor.spellcasting?.contents?.length || 0) > 0;
         const hasImpulses = actor.items?.some(i => i.system?.traits?.value?.includes("impulse"));
         if (hasSpellcasting || hasImpulses) {
-            return { attribute: keyAttr, className, isSpellcasterOrKineticist: true };
+            return { attribute: keyAttr, attributes: [keyAttr], className, isSpellcasterOrKineticist: true };
         }
     }
 
@@ -134,11 +183,11 @@ export function autoDetectClassAttribute(actor) {
         const entry = classSpellcastingEntries[0];
         const entryAbility = entry.system?.ability?.value || entry.attribute;
         if (entryAbility && ["int", "wis", "cha", "con"].includes(entryAbility)) {
-            return { attribute: entryAbility, className: className || entry.name, isSpellcasterOrKineticist: true };
+            return { attribute: entryAbility, attributes: [entryAbility], className: className || entry.name, isSpellcasterOrKineticist: true };
         }
     }
 
-    return { attribute: "int", className, isSpellcasterOrKineticist: false };
+    return { attribute: "int", attributes: ["int"], className, isSpellcasterOrKineticist: false };
 }
 
 /**
@@ -158,7 +207,9 @@ export function getActorSpellDamageConfig(actor) {
 
     let activeAttributes = [];
     if (mode === "auto") {
-        activeAttributes = [auto.attribute];
+        activeAttributes = Array.isArray(auto.attributes) && auto.attributes.length > 0
+            ? auto.attributes
+            : [auto.attribute];
     } else if (mode === "dual_int_wis") {
         activeAttributes = ["int", "wis"];
     } else if (mode === "dual_int_cha") {
@@ -341,7 +392,11 @@ export function registerSpellDamageSheetIntegration() {
 
         let currentBonusDisplay = "0";
         if (config.mode === "auto") {
-            currentBonusDisplay = `+${autoBonus} ${auto.attribute.toUpperCase()}`;
+            if (auto.attributes?.length > 1) {
+                currentBonusDisplay = auto.attributes.map(a => `+${calculateHalfModifier(actor, a)} ${a.toUpperCase()}`).join(" / ");
+            } else {
+                currentBonusDisplay = `+${autoBonus} ${auto.attribute.toUpperCase()}`;
+            }
         } else if (config.mode.startsWith("dual_")) {
             currentBonusDisplay = "Dual";
         } else if (config.mode === "all") {
@@ -350,9 +405,12 @@ export function registerSpellDamageSheetIntegration() {
             currentBonusDisplay = `+${calculateHalfModifier(actor, config.mode)} ${config.mode.toUpperCase()}`;
         }
 
+        const autoAttrSummary = (auto.attributes?.length > 1)
+            ? auto.attributes.map(a => `${a.toUpperCase()}: +${calculateHalfModifier(actor, a)}`).join(" & ")
+            : `${auto.attribute.toUpperCase()}: +${autoBonus}`;
         const autoLabel = auto.className
-            ? `${auto.className} (${auto.attribute.toUpperCase()}: +${autoBonus})`
-            : `${auto.attribute.toUpperCase()} (+${autoBonus})`;
+            ? `${auto.className} (${autoAttrSummary})`
+            : `${autoAttrSummary}`;
 
         bar.innerHTML = `
             <div class="variant-bar-content">

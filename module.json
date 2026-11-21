@@ -1,7 +1,7 @@
 {
   "id": "pf2e-awesome-variant-rules",
   "title": "PF2e Awesome Variant Rules",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "compatibility": {
     "minimum": "14",
     "verified": "14"
@@ -14,7 +14,8 @@
   ],
   "styles": [
     "styles/risk-dice.css",
-    "styles/spell-damage-modifier.css"
+    "styles/spell-damage-modifier.css",
+    "styles/dual-class.css"
   ],
   "socket": true,
   "packs": [
@@ -46,7 +47,7 @@
       "name": "Aeneas"
     }
   ],
-  "description": "Various Awesome Variant Rules for PF2e to make the game more interesting and dynamic, including Quick Crafting, Quick Study (Learn a Spell), Split Dice Damage/Healing, and Risk Dice (Tension Dice).",
+  "description": "Various Awesome Variant Rules for PF2e to make the game more interesting and dynamic, including Dual Class, Quick Crafting, Quick Study (Learn a Spell), Split Dice Damage/Healing, Spellcasting Modifiers, and Risk Dice (Tension Dice).",
   "relationships": {
     "systems": [
       {

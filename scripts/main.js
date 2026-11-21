@@ -23,6 +23,17 @@ import {
     calculateHalfModifier
 } from './spell-damage-modifier.js';
 import {
+    registerDualClassSettings,
+    initDualClass,
+    isDualClassEnabled,
+    getSecondaryClassData,
+    getDualClassSummary,
+    setSecondaryClass,
+    removeSecondaryClass,
+    syncSecondaryClassFeatures,
+    openSecondaryClassPicker
+} from './dual-class.js';
+import {
     registerRiskDiceSettings,
     registerRiskDiceSockets,
     registerRiskDiceChatListeners,
@@ -183,6 +194,9 @@ Hooks.once('init', () => {
     // Register Spellcasting Damage Modifier Variant Settings
     registerSpellDamageSettings();
 
+    // Register Dual Class Variant Rule Settings (off by default)
+    registerDualClassSettings();
+
     // Setting Menu to manually re-sync macros
     game.settings.registerMenu(MODULE_ID, "syncMacrosMenu", {
         name: "Recreate / Sync Macros",
@@ -260,6 +274,16 @@ Hooks.once('ready', async () => {
     initSpellDamageModifier();
     game.pf2eAwesomeVariantRules.getSpellDamageConfig = getActorSpellDamageConfig;
     game.pf2eAwesomeVariantRules.calculateHalfSpellDamageMod = calculateHalfModifier;
+
+    // Initialize Dual Class Variant Rule
+    initDualClass();
+    game.pf2eAwesomeVariantRules.isDualClassEnabled = isDualClassEnabled;
+    game.pf2eAwesomeVariantRules.getSecondaryClass = getSecondaryClassData;
+    game.pf2eAwesomeVariantRules.getDualClassSummary = getDualClassSummary;
+    game.pf2eAwesomeVariantRules.setSecondaryClass = setSecondaryClass;
+    game.pf2eAwesomeVariantRules.removeSecondaryClass = removeSecondaryClass;
+    game.pf2eAwesomeVariantRules.syncSecondaryClassFeatures = syncSecondaryClassFeatures;
+    game.pf2eAwesomeVariantRules.openSecondaryClassPicker = openSecondaryClassPicker;
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";

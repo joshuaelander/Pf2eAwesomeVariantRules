@@ -1,0 +1,488 @@
+/**
+ * PF2e Awesome Variant Rules: Dual Class Variant Rule Styles
+ * Designed to match PF2e's native Character Sheet detail fields (Ancestry, Heritage, Background, Class, Deity)
+ * and Foundry v14 DialogV2 light/dark themes.
+ */
+
+/* ------------------------------------------------------------------------- */
+/* 1. SECOND CLASS DETAIL FIELD ON CHARACTER SHEET                           */
+/*    Matches PF2e's native parchment detail fields (transparent wrapper,    */
+/*    uppercase crimson label, flat light-gray value bar with serif text).   */
+/* ------------------------------------------------------------------------- */
+
+.pf2e-avr-dual-class-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    font-family: var(--sans-serif, "Signika", sans-serif);
+    font-size: var(--font-size-10, 0.65rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--primary, #5e0000);
+    line-height: 1.25;
+    min-height: 14px;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 26px;
+    padding: 0 4px 0 6px;
+    background: var(--bg-dark, rgba(0, 0, 0, 0.08));
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: var(--text-dark, #191813);
+    transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-value-row:hover {
+    background: rgba(0, 0, 0, 0.11);
+}
+
+.pf2e-avr-dual-class-detail.is-dragover .pf2e-avr-dc-value-row {
+    border-color: #b3820a;
+    background: rgba(255, 244, 214, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(179, 130, 10, 0.35);
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-name {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--serif, "Eczar", "Modesto Condensed", Georgia, serif);
+    font-weight: 600;
+    font-size: var(--font-size-14, 0.9rem);
+    color: var(--text-dark, #191813);
+    text-decoration: none;
+    cursor: pointer;
+    line-height: 1.2;
+    overflow: hidden;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-name:hover {
+    color: var(--primary, #5e0000);
+    text-decoration: underline;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-placeholder {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 0.82em;
+    font-style: italic;
+    color: rgba(25, 24, 19, 0.48);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-placeholder.is-clickable {
+    cursor: pointer;
+}
+
+/* Inline Key Attribute Pill & Select (sits neatly on the right of the label row) */
+.pf2e-avr-dual-class-detail .dc-key-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+    border-radius: 2px;
+    background: var(--primary, #5e0000);
+    color: #fffdf8;
+    font-size: 0.9em;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+.pf2e-avr-dual-class-detail .dc-key-pill.is-shared {
+    background: rgba(90, 80, 70, 0.18);
+    color: #5c5247;
+}
+
+.pf2e-avr-dual-class-detail .dc-key-select,
+.pf2e-avr-dual-class-detail .dc-alt-key-select {
+    height: 16px;
+    min-height: 0;
+    padding: 0 2px;
+    margin: 0;
+    font-size: 0.95em;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-dark, #191813);
+    background: rgba(255, 253, 249, 0.9);
+    border: 1px solid rgba(94, 0, 0, 0.35);
+    border-radius: 2px;
+    cursor: pointer;
+    text-transform: none;
+}
+
+/* Action Icon Controls (match PF2e's subtle dark-ink icons on parchment bars) */
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    border-radius: 2px;
+    color: var(--text-dark, #191813);
+    opacity: 0.72;
+    font-size: 0.78em;
+    cursor: pointer;
+    line-height: 1;
+    box-shadow: none;
+    min-height: 0;
+    min-width: 0;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-btn.dc-btn-search {
+    width: 22px;
+    height: 22px;
+    font-size: 0.92em;
+    opacity: 0.85;
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-btn:hover {
+    opacity: 1;
+    color: var(--primary, #5e0000);
+    background: rgba(94, 0, 0, 0.1);
+}
+
+.pf2e-avr-dual-class-detail .pf2e-avr-dc-btn.dc-btn-danger:hover {
+    opacity: 1;
+    color: #b71c1c;
+    background: rgba(183, 28, 28, 0.12);
+}
+
+/* ------------------------------------------------------------------------- */
+/* 2. SKILLS TAB ADDITIONAL SKILLS INFO NOTE                                 */
+/* ------------------------------------------------------------------------- */
+
+.pf2e-avr-dc-skills-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 8px 0;
+    padding: 5px 10px;
+    background: rgba(253, 250, 243, 0.88);
+    border: 1px solid rgba(124, 26, 26, 0.35);
+    border-left: 3px solid #7c1a1a;
+    border-radius: 3px;
+    font-size: 0.85em;
+    color: #191813;
+}
+
+.pf2e-avr-dc-skills-note i {
+    color: #7c1a1a;
+    flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* 3. ATTRIBUTE BUILDER DUAL CLASS BANNER                                    */
+/* ------------------------------------------------------------------------- */
+
+.pf2e-avr-dc-attr-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 0 0 10px 0;
+    padding: 7px 10px;
+    background: rgba(253, 250, 243, 0.92);
+    border: 1px solid rgba(124, 26, 26, 0.45);
+    border-left: 4px solid #7c1a1a;
+    border-radius: 4px;
+    color: #191813;
+    font-size: 0.9em;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-banner-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-banner-left i {
+    color: #7c1a1a;
+    font-size: 1.15em;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-title {
+    color: #5e0000;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-status {
+    display: block;
+    font-size: 0.88em;
+    line-height: 1.3;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-status.is-active {
+    color: #1b5e20;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-status.is-shared {
+    color: #7a4f01;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-status.is-muted {
+    color: #6b6054;
+}
+
+.pf2e-avr-dc-attr-banner .dc-attr-select-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    font-size: 0.9em;
+    margin: 0;
+}
+
+.pf2e-avr-dc-attr-banner select {
+    height: 24px;
+    padding: 1px 6px;
+    background: #fffdf9;
+    border: 1px solid rgba(124, 26, 26, 0.45);
+    border-radius: 3px;
+    color: #191813;
+    cursor: pointer;
+}
+
+/* ------------------------------------------------------------------------- */
+/* 4. CLASS PICKER DIALOG                                                    */
+/* ------------------------------------------------------------------------- */
+
+.pf2e-avr-dc-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pf2e-avr-dc-picker .dc-picker-subtitle {
+    font-size: 0.9em;
+    margin-bottom: 6px;
+}
+
+.pf2e-avr-dc-picker .dc-picker-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.pf2e-avr-dc-picker .dc-picker-search-wrap i {
+    position: absolute;
+    left: 9px;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.pf2e-avr-dc-picker .dc-picker-search {
+    width: 100%;
+    padding: 5px 8px 5px 28px;
+    border-radius: 4px;
+}
+
+.pf2e-avr-dc-picker .dc-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.pf2e-avr-dc-picker .dc-picker-hint {
+    font-size: 0.8em;
+    opacity: 0.78;
+    text-align: center;
+    padding-top: 2px;
+}
+
+.pf2e-avr-dc-picker .pf2e-avr-dc-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 8px;
+    text-align: left;
+    background: rgba(253, 250, 243, 0.78);
+    border: 1px solid rgba(124, 26, 26, 0.25);
+    border-radius: 4px;
+    color: #191813;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+    line-height: 1.25;
+}
+
+.pf2e-avr-dc-picker .pf2e-avr-dc-picker-item:hover {
+    background: rgba(255, 252, 245, 0.98);
+    border-color: #7c1a1a;
+    box-shadow: 0 1px 4px rgba(94, 0, 0, 0.15);
+}
+
+.pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected {
+    border-color: #b3820a;
+    background: rgba(255, 246, 214, 0.96);
+    box-shadow: inset 0 0 0 1px #b3820a, 0 1px 5px rgba(179, 130, 10, 0.28);
+}
+
+.pf2e-avr-dc-picker .dc-selected-check {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #b3820a;
+    color: #fffdf8;
+    font-size: 0.8em;
+    flex-shrink: 0;
+}
+
+.pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected .dc-selected-check {
+    display: inline-flex;
+}
+
+.pf2e-avr-dc-picker .dc-class-icon {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(124, 26, 26, 0.35);
+    border-radius: 3px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.pf2e-avr-dc-picker .dc-class-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+
+.pf2e-avr-dc-picker .dc-class-name-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pf2e-avr-dc-picker .dc-class-name {
+    font-weight: 700;
+    font-size: 1em;
+    color: #5e0000;
+}
+
+.pf2e-avr-dc-picker .dc-class-source {
+    font-size: 0.75em;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+.pf2e-avr-dc-picker .dc-class-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pf2e-avr-dc-picker .dc-stat-pill {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 0.76em;
+    font-weight: 600;
+    background: rgba(124, 26, 26, 0.08);
+    border: 1px solid rgba(124, 26, 26, 0.22);
+    border-radius: 3px;
+    color: #3d2e26;
+}
+
+/* ------------------------------------------------------------------------- */
+/* 5. DARK THEME SUPPORT (Scoped ONLY to dark dialogs, NOT light PF2e sheet) */
+/* ------------------------------------------------------------------------- */
+
+.application.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item,
+.theme-dark .dialog .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item,
+.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item {
+    background: rgba(38, 30, 30, 0.88);
+    border-color: rgba(186, 60, 60, 0.35);
+    color: #f0e6dc;
+}
+
+.application.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item:hover,
+.theme-dark .dialog .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item:hover,
+.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item:hover {
+    background: rgba(54, 40, 40, 0.96);
+    border-color: #e57373;
+}
+
+.application.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected,
+.theme-dark .dialog .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected,
+.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected {
+    background: rgba(82, 56, 28, 0.95);
+    border-color: #d4af37;
+    box-shadow: inset 0 0 0 1px #d4af37, 0 0 6px rgba(212, 175, 55, 0.35);
+}
+
+.application.theme-dark .pf2e-avr-dc-picker .dc-class-name,
+.theme-dark .pf2e-avr-dc-picker .dc-class-name {
+    color: #ef9a9a;
+}
+
+.application.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected .dc-class-name,
+.theme-dark .pf2e-avr-dc-picker .pf2e-avr-dc-picker-item.is-selected .dc-class-name {
+    color: #ffe082;
+}
+
+.application.theme-dark .pf2e-avr-dc-picker .dc-stat-pill,
+.theme-dark .pf2e-avr-dc-picker .dc-stat-pill {
+    background: rgba(220, 80, 80, 0.14);
+    border-color: rgba(220, 80, 80, 0.3);
+    color: #e2d5c8;
+}

@@ -15,6 +15,7 @@ Contents:
 11. Risk Dice / Tension Dice (Done)
 12. Sanity Dice (TBD)
 13. Spellcasting Modifiers (Done)
+14. Dual Class Variant Rule (Done)
 
 ### Risk Dice (Tension Dice Variant)
 A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
@@ -74,6 +75,28 @@ A variant rule that empowers spellcasters and kineticists by adding a bonus to d
   - Enable/disable the variant rule globally in module settings.
   - Toggle inclusion of Kineticist impulses (enabled by default).
   - Restrict to class spells only toggle (enabled by default).
+
+### Dual Class Variant Rule
+Full native Pathfinder 2e **Dual-Class PCs** support directly on the character sheet — without cluttering your World Items sidebar with merged custom class items:
+- **Off by Default**: Must be explicitly enabled by the GM in Module Settings (`Enable Dual Class Variant Rule`).
+- **Second Class Slot on the Character Sheet**:
+  - Adds a native-styled **Second Class** field right next to the primary Class field on the Character tab.
+  - Pick any class via a built-in searchable **Class Picker Dialog** (showing HP, Key Attribute, initial Saves, and Perception) or simply **drag and drop** any class item directly onto the Second Class slot.
+  - Includes one-click view, change, **Resync Features**, and remove controls, plus a hover summary of combined Dual Class stats.
+- **Official PF2e Dual-Class Stat Calculation**:
+  - **Hit Points**: Automatically uses the **higher** HP per level between both classes (never summed).
+  - **Saving Throws, Perception, Weapon/Armor Proficiencies & Spellcasting**: Uses the **highest** proficiency rank from either class at level 1, and higher-level upgrades from both classes' features apply natively via PF2e's Rule Element engine.
+  - **Key Attribute Boosts**: Grants the 1st-level key attribute boost from both classes (respecting PF2e's level-1 +4 cap, partial boosts above +4, Apex items, and raw non-stacking when both classes share the same key attribute), with inline selection for multi-option classes and live display inside PF2e's **Attribute Builder**.
+  - **Skills**: Automatically trains fixed skills from **both** classes and displays the **higher** additional skill allowance when the second class grants more skills.
+  - **Class DCs & Roll Options**: Registers a separate Class DC for the second class using its key attribute and adds `class:<slug>` roll options so feats and predicates recognize both classes.
+- **Class Feats & Automatic Level-Up Features**:
+  - Adds a dedicated **Dual Class Feats** section on the Feats tab using the second class's exact `classFeatLevels` and pre-filtered Compendium Browser traits.
+  - Merges unique extra progression slots (such as Rogue/Investigator every-level Skill Feats) without doubling standard shared progression.
+  - **Auto-Grants Class Features on Level Up**: Automatically adds newly unlocked second-class features as you level up (prompting native ChoiceSets for subclasses, schools, bloodlines, etc.), deduplicates shared features (like *Weapon Specialization* or *Shield Block*), and cleans up over-level features if you level down.
+- **Configurable Settings**:
+  - **Enable Dual Class Variant Rule** (default: `false`).
+  - **Auto-Grant Class Features on Level Up** (default: `true`).
+  - **Allow Alternative Boost on Shared Key Attribute** (default: `false` — optional house rule if both classes share a single key attribute).
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
 
