@@ -39,6 +39,7 @@ import {
     isAncestryParagonEnabled,
     getAncestryParagonSlotLevels
 } from './ancestry-paragon.js';
+import { registerSettingsHeaders } from './settings-headers.js';
 import {
     registerRiskDiceSettings,
     registerRiskDiceSockets,
@@ -205,6 +206,9 @@ Hooks.once('init', () => {
 
     // Register Ancestry Paragon Variant Rule Settings (off by default)
     registerAncestryParagonSettings();
+
+    // Register Settings Config Section Headers
+    registerSettingsHeaders();
 
     // Setting Menu to manually re-sync macros
     game.settings.registerMenu(MODULE_ID, "syncMacrosMenu", {

@@ -1,0 +1,40 @@
+/**
+ * PF2e Awesome Variant Rules: Settings Section Header Styles
+ * Clean section dividers supporting both Foundry v14 Dark and Light themes.
+ */
+
+.pf2e-avr-settings-header {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 18px 0 6px 0;
+    padding: 0;
+}
+
+.pf2e-avr-settings-header.is-first {
+    margin-top: 6px;
+}
+
+.pf2e-avr-settings-header.is-subheader {
+    margin: 12px 0 4px 0;
+}
+
+.pf2e-avr-settings-header .pf2e-avr-settings-header-title {
+    display: block;
+    margin: 0;
+    padding: 4px 2px 5px 2px;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-bottom: 2px solid var(--color-underline-header, rgba(168, 44, 44, 0.75));
+    color: var(--color-text-emphatic, inherit);
+    line-height: 1.3;
+}
+
+.pf2e-avr-settings-header.is-subheader .pf2e-avr-settings-header-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0.9;
+    border-bottom-width: 1px;
+    border-bottom-style: dashed;
+    padding-bottom: 3px;
+}

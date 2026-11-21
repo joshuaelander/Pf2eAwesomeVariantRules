@@ -15,7 +15,8 @@
   "styles": [
     "styles/risk-dice.css",
     "styles/spell-damage-modifier.css",
-    "styles/dual-class.css"
+    "styles/dual-class.css",
+    "styles/settings-headers.css"
   ],
   "socket": true,
   "packs": [
