@@ -34,6 +34,12 @@ import {
     openSecondaryClassPicker
 } from './dual-class.js';
 import {
+    registerAncestryParagonSettings,
+    initAncestryParagon,
+    isAncestryParagonEnabled,
+    getAncestryParagonSlotLevels
+} from './ancestry-paragon.js';
+import {
     registerRiskDiceSettings,
     registerRiskDiceSockets,
     registerRiskDiceChatListeners,
@@ -197,6 +203,9 @@ Hooks.once('init', () => {
     // Register Dual Class Variant Rule Settings (off by default)
     registerDualClassSettings();
 
+    // Register Ancestry Paragon Variant Rule Settings (off by default)
+    registerAncestryParagonSettings();
+
     // Setting Menu to manually re-sync macros
     game.settings.registerMenu(MODULE_ID, "syncMacrosMenu", {
         name: "Recreate / Sync Macros",
@@ -284,6 +293,11 @@ Hooks.once('ready', async () => {
     game.pf2eAwesomeVariantRules.removeSecondaryClass = removeSecondaryClass;
     game.pf2eAwesomeVariantRules.syncSecondaryClassFeatures = syncSecondaryClassFeatures;
     game.pf2eAwesomeVariantRules.openSecondaryClassPicker = openSecondaryClassPicker;
+
+    // Initialize Ancestry Paragon Variant Rule
+    initAncestryParagon();
+    game.pf2eAwesomeVariantRules.isAncestryParagonEnabled = isAncestryParagonEnabled;
+    game.pf2eAwesomeVariantRules.getAncestryParagonSlotLevels = getAncestryParagonSlotLevels;
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";

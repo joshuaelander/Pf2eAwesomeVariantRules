@@ -16,6 +16,7 @@ Contents:
 12. Sanity Dice (TBD)
 13. Spellcasting Modifiers (Done)
 14. Dual Class Variant Rule (Done)
+15. Ancestry Paragon Variant Rule (Done)
 
 ### Risk Dice (Tension Dice Variant)
 A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
@@ -97,6 +98,13 @@ Full native Pathfinder 2e **Dual-Class PCs** support directly on the character s
   - **Enable Dual Class Variant Rule** (default: `false`).
   - **Auto-Grant Class Features on Level Up** (default: `true`).
   - **Allow Alternative Boost on Shared Key Attribute** (default: `false` — optional house rule if both classes share a single key attribute).
+
+### Ancestry Paragon Variant Rule
+Implements Pathfinder 2e's official **Ancestry Paragon** variant rule (*Gamemastery Guide* / *GM Core*):
+- **Off by Default**: Must be explicitly enabled by the GM in Module Settings (`Enable Ancestry Paragon Variant Rule`).
+- **Official Feat Progression**: Grants an extra Ancestry Feat at **1st level** and an Ancestry Feat at every odd level not already covered by standard progression (**levels 1, 3, 7, 11, 15, and 19** — for **11 total Ancestry Feats** across levels 1–20).
+- **Native Sheet Integration**: Adds an **Ancestry Paragon Feats** group right below **Ancestry Feats** on the Feats tab, inheriting the character's exact ancestry and versatile heritage Compendium Browser filters and slot level caps.
+- **Non-Destructive & Compatible**: Works standalone or alongside Dual Class and Free Archetype, avoids duplicating groups if another module already provides Ancestry Paragon slots, and preserves existing feats in Bonus Feats if disabled later.
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
 
