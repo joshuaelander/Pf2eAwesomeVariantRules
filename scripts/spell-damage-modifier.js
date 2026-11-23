@@ -14,6 +14,7 @@
 const MODULE_ID = "pf2e-awesome-variant-rules";
 
 import { isDualClassEnabled, getSecondaryClassData, getSecondaryClassKeyAbility } from './dual-class.js';
+import { registerWrapper } from './wrapper-utils.js';
 
 /**
  * Mapping of standard PF2e classes to their primary spellcasting/impulse attribute.
@@ -479,17 +480,14 @@ export function registerSpellDamageSheetIntegration() {
  * Main initialization for the spell damage modifier module.
  */
 export function initSpellDamageModifier() {
-    // 1. Wrap ActorPF2e.prototype.prepareDerivedData to inject synthetic modifiers
-    const ActorPF2eClass = CONFIG.Actor.documentClass;
-    if (ActorPF2eClass?.prototype) {
-        const originalPrepareDerivedData = ActorPF2eClass.prototype.prepareDerivedData;
-        ActorPF2eClass.prototype.prepareDerivedData = function () {
-            originalPrepareDerivedData.call(this);
-            if (this.type === "character") {
-                injectSpellDamageModifierSynthetic(this);
-            }
-        };
-    }
+    // 1. Wrap ActorPF2e.prototype.prepareDerivedData via our libWrapper-aware registry
+    registerWrapper("CONFIG.Actor.documentClass.prototype.prepareDerivedData", function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character") {
+            injectSpellDamageModifierSynthetic(this);
+        }
+        return result;
+    });
 
     // 2. Character Sheet Integration
     registerSpellDamageSheetIntegration();

@@ -24,6 +24,7 @@
 
 import { isDualClassEnabled, getSecondaryClassData } from "./dual-class.js";
 import { isAncestryParagonEnabled } from "./ancestry-paragon.js";
+import { registerWrapper } from "./wrapper-utils.js";
 
 const MODULE_ID = "pf2e-awesome-variant-rules";
 
@@ -1071,138 +1072,119 @@ function wrapCompendiumBrowser() {
     const featTab = browser?.tabs?.feat;
     if (!browser || !featTab) return;
 
+    const featTabPath = "game.pf2e.compendiumBrowser.tabs.feat";
+
+    // 1. Wrap `indexData` getter if defined as an accessor (uses libWrapper `#get` when active)
     const indexDataDesc = findPropertyDescriptor(featTab, "indexData");
     if (indexDataDesc?.get && indexDataDesc.configurable) {
-        const origGet = indexDataDesc.get;
-        const origSet = indexDataDesc.set;
         featTab._pf2eAvrIndexDataIsGetter = true;
-        Object.defineProperty(featTab, "indexData", {
-            configurable: true,
-            enumerable: indexDataDesc.enumerable ?? true,
-            get() {
-                const full = origGet.call(this);
-                const scope = this._pf2eAvrArchetypeScope;
-                if (scope && Array.isArray(full)) {
-                    return full.filter(entry => entryMatchesArchetypeScope(entry, scope));
-                }
-                return full;
-            },
-            ...(origSet ? { set(val) { origSet.call(this, val); } } : {})
+        registerWrapper(`${featTabPath}.indexData#get`, function (wrapped) {
+            const full = wrapped.call(this);
+            const scope = this._pf2eAvrArchetypeScope;
+            if (scope && Array.isArray(full)) {
+                return full.filter(entry => entryMatchesArchetypeScope(entry, scope));
+            }
+            return full;
         });
     }
 
+    // 2. Wrap `currentIndex` getter if present
     const currentIndexDesc = findPropertyDescriptor(featTab, "currentIndex");
     if (currentIndexDesc?.get && currentIndexDesc.configurable) {
-        const origCurrentGet = currentIndexDesc.get;
-        Object.defineProperty(featTab, "currentIndex", {
-            configurable: true,
-            enumerable: currentIndexDesc.enumerable ?? true,
-            get() {
-                const list = origCurrentGet.call(this);
-                const scope = this._pf2eAvrArchetypeScope;
-                if (scope && Array.isArray(list)) {
-                    return list.filter(entry => entryMatchesArchetypeScope(entry, scope));
-                }
-                return list;
+        registerWrapper(`${featTabPath}.currentIndex#get`, function (wrapped) {
+            const list = wrapped.call(this);
+            const scope = this._pf2eAvrArchetypeScope;
+            if (scope && Array.isArray(list)) {
+                return list.filter(entry => entryMatchesArchetypeScope(entry, scope));
             }
+            return list;
         });
     }
 
-    if (typeof featTab.loadData === "function") {
-        const originalLoadData = featTab.loadData.bind(featTab);
-        featTab.loadData = async function (...args) {
-            const res = await originalLoadData(...args);
-            if (!this._pf2eAvrIndexDataIsGetter && Array.isArray(this.indexData) && this.indexData.length > 0) {
-                this._pf2eAvrFullIndexData = this.indexData;
-                if (this._pf2eAvrArchetypeScope) {
-                    applyIndexDataScope(this);
-                }
+    // 3. Wrap `loadData`, `filterIndexData`, `getIndexData`, and `resetFilters` via libWrapper-aware registry
+    registerWrapper(`${featTabPath}.loadData`, async function (wrapped, ...args) {
+        const res = await wrapped.apply(this, args);
+        if (!this._pf2eAvrIndexDataIsGetter && Array.isArray(this.indexData) && this.indexData.length > 0) {
+            this._pf2eAvrFullIndexData = this.indexData;
+            if (this._pf2eAvrArchetypeScope) {
+                applyIndexDataScope(this);
             }
-            return res;
-        };
-    }
+        }
+        return res;
+    });
 
-    if (typeof featTab.filterIndexData === "function") {
-        const originalFilterIndexData = featTab.filterIndexData.bind(featTab);
-        featTab.filterIndexData = function (entry) {
-            const passed = originalFilterIndexData(entry);
-            if (!passed) return false;
+    registerWrapper(`${featTabPath}.filterIndexData`, function (wrapped, entry, ...rest) {
+        const passed = wrapped.call(this, entry, ...rest);
+        if (!passed) return false;
 
-            const scope = this._pf2eAvrArchetypeScope;
-            if (scope) {
-                return entryMatchesArchetypeScope(entry, scope);
-            }
-            return true;
-        };
-    }
+        const scope = this._pf2eAvrArchetypeScope;
+        if (scope) {
+            return entryMatchesArchetypeScope(entry, scope);
+        }
+        return true;
+    });
 
-    if (typeof featTab.getIndexData === "function") {
-        const originalGetIndexData = featTab.getIndexData.bind(featTab);
-        featTab.getIndexData = function (...args) {
-            const res = originalGetIndexData(...args);
-            const scope = this._pf2eAvrArchetypeScope;
-            if (scope && Array.isArray(res)) {
-                return res.filter(entry => entryMatchesArchetypeScope(entry, scope));
-            }
-            return res;
-        };
-    }
+    registerWrapper(`${featTabPath}.getIndexData`, function (wrapped, ...args) {
+        const res = wrapped.apply(this, args);
+        const scope = this._pf2eAvrArchetypeScope;
+        if (scope && Array.isArray(res)) {
+            return res.filter(entry => entryMatchesArchetypeScope(entry, scope));
+        }
+        return res;
+    });
 
-    if (typeof featTab.resetFilters === "function") {
-        const originalResetFilters = featTab.resetFilters.bind(featTab);
-        featTab.resetFilters = function (...args) {
-            clearArchetypeScope(this);
-            return originalResetFilters(...args);
-        };
-    }
-
-    const originalTabOpen = typeof featTab.open === "function" ? featTab.open.bind(featTab) : null;
-    const originalBrowserOpenTab = typeof browser.openTab === "function" ? browser.openTab.bind(browser) : null;
+    registerWrapper(`${featTabPath}.resetFilters`, function (wrapped, ...args) {
+        clearArchetypeScope(this);
+        return wrapped.apply(this, args);
+    });
 
     // Store a deep clone of the exact call style & arguments PF2e passed when opening the slot
     // (preserving native level caps / options verbatim across PF2e versions).
     let lastOpenSnapshot = null;
+    let handlingOpen = false;
 
     const reopenFeatTabWithPatch = async (patchSpec) => {
-        if (lastOpenSnapshot) {
-            const clonedArgs = foundry.utils.deepClone(lastOpenSnapshot.args);
-            const targetFilter = extractFilterFromArg(clonedArgs[0]) || extractFilterFromArg(clonedArgs[1]);
-            if (targetFilter) {
-                applyPatchToFilterObject(targetFilter, patchSpec);
+        const prevHandling = handlingOpen;
+        handlingOpen = true;
+        try {
+            if (lastOpenSnapshot) {
+                const clonedArgs = foundry.utils.deepClone(lastOpenSnapshot.args);
+                const targetFilter = extractFilterFromArg(clonedArgs[0]) || extractFilterFromArg(clonedArgs[1]);
+                if (targetFilter) {
+                    applyPatchToFilterObject(targetFilter, patchSpec);
+                }
+                if (lastOpenSnapshot.via === "browser" && typeof browser.openTab === "function") {
+                    return await browser.openTab(...clonedArgs);
+                }
+                if (typeof featTab.open === "function") {
+                    return await featTab.open(...clonedArgs);
+                }
             }
-            if (lastOpenSnapshot.via === "browser" && originalBrowserOpenTab) {
-                return originalBrowserOpenTab(...clonedArgs);
-            }
-            if (originalTabOpen) {
-                return originalTabOpen(...clonedArgs);
-            }
-        }
 
-        // Fallback if no snapshot was captured
-        const clonedFilter = featTab.filterData ? foundry.utils.deepClone(featTab.filterData) : null;
-        if (clonedFilter) {
-            applyPatchToFilterObject(clonedFilter, patchSpec);
-            if (originalTabOpen) return originalTabOpen(clonedFilter);
-            if (originalBrowserOpenTab) return originalBrowserOpenTab("feat", clonedFilter);
+            const clonedFilter = featTab.filterData ? foundry.utils.deepClone(featTab.filterData) : null;
+            if (clonedFilter) {
+                applyPatchToFilterObject(clonedFilter, patchSpec);
+                if (typeof featTab.open === "function") return await featTab.open(clonedFilter);
+                if (typeof browser.openTab === "function") return await browser.openTab("feat", clonedFilter);
+            }
+        } finally {
+            handlingOpen = prevHandling;
         }
     };
 
-    let handlingOpen = false;
-
-    const runEnhancedFeatOpen = async (via, invokeOriginal, args) => {
+    const runEnhancedFeatOpen = async (via, receiver, wrapped, args) => {
         if (handlingOpen) {
-            return invokeOriginal(...args);
+            return wrapped.apply(receiver, args);
         }
 
         const ctx = consumePendingBrowseContext();
         if (!ctx) {
             clearArchetypeScope(featTab);
-            return invokeOriginal(...args);
+            return wrapped.apply(receiver, args);
         }
 
         handlingOpen = true;
         try {
-            // Snapshot PF2e's exact original args before we patch them (preserves native level range & options)
             try {
                 lastOpenSnapshot = { via, args: foundry.utils.deepClone(args) };
             } catch {
@@ -1212,7 +1194,7 @@ function wrapCompendiumBrowser() {
             const patchSpec = await buildBrowsePatchSpec(ctx);
             if (!patchSpec) {
                 clearArchetypeScope(featTab);
-                return await invokeOriginal(...args);
+                return await wrapped.apply(receiver, args);
             }
 
             if (patchSpec.archetypeScope) {
@@ -1229,7 +1211,7 @@ function wrapCompendiumBrowser() {
                 applyPatchToFilterObject(filterArg, patchSpec);
             }
 
-            const result = await invokeOriginal(...args);
+            const result = await wrapped.apply(receiver, args);
 
             if (patchSpec.archetypeScope && !featTab._pf2eAvrIndexDataIsGetter && Array.isArray(featTab.indexData)) {
                 const beforeLen = featTab.indexData.length;
@@ -1256,25 +1238,18 @@ function wrapCompendiumBrowser() {
         }
     };
 
-    if (originalTabOpen) {
-        featTab.open = async function (...args) {
-            return runEnhancedFeatOpen("tab", originalTabOpen, args);
-        };
-    }
+    // 4. Wrap `featTab.open` and `browser.openTab` via libWrapper-aware registry
+    registerWrapper(`${featTabPath}.open`, function (wrapped, ...args) {
+        return runEnhancedFeatOpen("tab", this, wrapped, args);
+    });
 
-    if (originalBrowserOpenTab) {
-        browser.openTab = async function (tabName, ...rest) {
-            if (tabName !== "feat") {
-                clearArchetypeScope(featTab);
-                return originalBrowserOpenTab(tabName, ...rest);
-            }
-            return runEnhancedFeatOpen(
-                "browser",
-                (...allArgs) => originalBrowserOpenTab(...allArgs),
-                [tabName, ...rest]
-            );
-        };
-    }
+    registerWrapper("game.pf2e.compendiumBrowser.openTab", function (wrapped, tabName, ...rest) {
+        if (tabName !== "feat") {
+            clearArchetypeScope(featTab);
+            return wrapped.call(this, tabName, ...rest);
+        }
+        return runEnhancedFeatOpen("browser", this, wrapped, [tabName, ...rest]);
+    });
 
     Hooks.on("renderCompendiumBrowser", () => {
         if (featTab._pf2eAvrArchetypeScope) {

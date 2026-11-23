@@ -13,6 +13,8 @@
 const MODULE_ID = "pf2e-awesome-variant-rules";
 const PARAGON_GROUP_ID = "ancestryparagon";
 
+import { registerWrapper } from "./wrapper-utils.js";
+
 /** All odd character levels where Ancestry Paragon grants ancestry feats (plus an extra 1st-level feat) */
 const ALL_ODD_LEVELS = [3, 5, 7, 9, 11, 13, 15, 17, 19];
 
@@ -285,51 +287,41 @@ function ensureAncestryParagonFallback(actor) {
 }
 
 /**
- * Install prototype wrappers on `CharacterPF2e` once on ready.
+ * Install prototype wrappers on `CharacterPF2e` via our libWrapper-aware registry once on ready.
  */
 function installAncestryParagonWrappers() {
     if (wrappersInstalled) return;
 
-    const CharacterClass = CONFIG.PF2E?.Actor?.documentClasses?.character ?? CONFIG.Actor?.documentClass;
-    if (!CharacterClass?.prototype) {
-        console.warn("PF2e Awesome Variant Rules | Could not locate CharacterPF2e class for Ancestry Paragon.");
-        return;
-    }
+    const charPath = CONFIG.PF2E?.Actor?.documentClasses?.character?.prototype
+        ? "CONFIG.PF2E.Actor.documentClasses.character.prototype"
+        : "CONFIG.Actor.documentClass.prototype";
 
-    const proto = CharacterClass.prototype;
-
-    if (typeof proto.prepareEmbeddedDocuments === "function") {
-        const originalPrepareEmbedded = proto.prepareEmbeddedDocuments;
-        proto.prepareEmbeddedDocuments = function (...args) {
-            const result = originalPrepareEmbedded.apply(this, args);
-            if (this.type === "character" && isAncestryParagonEnabled()) {
-                try {
-                    if (this.rollOptions?.all) {
-                        this.rollOptions.all["variant:ancestry-paragon"] = true;
-                    }
-                    ensureAncestryParagonFeatsWrapped(this);
-                } catch (err) {
-                    console.error(`PF2e Awesome Variant Rules | Ancestry Paragon prepareEmbeddedDocuments error:`, err);
+    registerWrapper(`${charPath}.prepareEmbeddedDocuments`, function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character" && isAncestryParagonEnabled()) {
+            try {
+                if (this.rollOptions?.all) {
+                    this.rollOptions.all["variant:ancestry-paragon"] = true;
                 }
+                ensureAncestryParagonFeatsWrapped(this);
+            } catch (err) {
+                console.error(`PF2e Awesome Variant Rules | Ancestry Paragon prepareEmbeddedDocuments error:`, err);
             }
-            return result;
-        };
-    }
+        }
+        return result;
+    });
 
-    if (typeof proto.prepareDerivedData === "function") {
-        const originalDerived = proto.prepareDerivedData;
-        proto.prepareDerivedData = function (...args) {
-            const result = originalDerived.apply(this, args);
-            if (this.type === "character" && isAncestryParagonEnabled()) {
-                try {
-                    ensureAncestryParagonFallback(this);
-                } catch (err) {
-                    console.error(`PF2e Awesome Variant Rules | Ancestry Paragon prepareDerivedData error:`, err);
-                }
+    registerWrapper(`${charPath}.prepareDerivedData`, function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character" && isAncestryParagonEnabled()) {
+            try {
+                ensureAncestryParagonFallback(this);
+            } catch (err) {
+                console.error(`PF2e Awesome Variant Rules | Ancestry Paragon prepareDerivedData error:`, err);
             }
-            return result;
-        };
-    }
+        }
+        return result;
+    });
 
     wrappersInstalled = true;
 }

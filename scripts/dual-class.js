@@ -28,6 +28,8 @@
 const MODULE_ID = "pf2e-awesome-variant-rules";
 const FLAG_KEY = "dualClass";
 
+import { registerWrapper } from "./wrapper-utils.js";
+
 const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
 const ABILITY_LABELS = {
     str: "STR",
@@ -930,60 +932,50 @@ function ensureDualClassFeatGroupFallback(actor) {
 }
 
 /**
- * Install prototype wrappers on `CharacterPF2e` (and `ActorPF2e` fallback) once on ready.
+ * Install prototype wrappers on `CharacterPF2e` (and `ActorPF2e` fallback) via our
+ * libWrapper-aware registry once on ready.
  */
 function installDualClassWrappers() {
     if (wrappersInstalled) return;
 
-    const CharacterClass = CONFIG.PF2E?.Actor?.documentClasses?.character ?? CONFIG.Actor?.documentClass;
-    if (!CharacterClass?.prototype) {
-        console.warn("PF2e Awesome Variant Rules | Could not locate CharacterPF2e class for Dual Class.");
-        return;
-    }
-
-    const proto = CharacterClass.prototype;
+    const hasCharacterClass = Boolean(CONFIG.PF2E?.Actor?.documentClasses?.character?.prototype);
+    const charPath = hasCharacterClass
+        ? "CONFIG.PF2E.Actor.documentClasses.character.prototype"
+        : "CONFIG.Actor.documentClass.prototype";
 
     // 1. Wrap `prepareEmbeddedDocuments` -> merges base HP, saves, perception, attacks,
     //    defenses, spellcasting, trained skills, classDC, and rollOptions BEFORE derived data.
-    if (typeof proto.prepareEmbeddedDocuments === "function") {
-        const originalPrepareEmbedded = proto.prepareEmbeddedDocuments;
-        proto.prepareEmbeddedDocuments = function (...args) {
-            const result = originalPrepareEmbedded.apply(this, args);
-            if (this.type === "character") {
-                try {
-                    applySecondaryClassBaseData(this);
-                } catch (err) {
-                    console.error(`PF2e Awesome Variant Rules | Dual Class prepareEmbeddedDocuments error for ${this.name}:`, err);
-                }
+    registerWrapper(`${charPath}.prepareEmbeddedDocuments`, function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character") {
+            try {
+                applySecondaryClassBaseData(this);
+            } catch (err) {
+                console.error(`PF2e Awesome Variant Rules | Dual Class prepareEmbeddedDocuments error for ${this.name}:`, err);
             }
-            return result;
-        };
-    }
+        }
+        return result;
+    });
 
     // 2. Wrap `applyActiveEffects` -> early checkpoint for Secondary Class Key Attribute Boost
-    if (typeof proto.applyActiveEffects === "function") {
-        const originalApplyAE = proto.applyActiveEffects;
-        proto.applyActiveEffects = function (...args) {
-            const result = originalApplyAE.apply(this, args);
-            if (this.type === "character") {
-                try {
-                    applySecondaryClassKeyAttributeBoost(this, { checkpoint: "applyAE" });
-                } catch (err) {
-                    console.error(`PF2e Awesome Variant Rules | Dual Class key attribute boost error for ${this.name}:`, err);
-                }
+    registerWrapper(`${charPath}.applyActiveEffects`, function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character") {
+            try {
+                applySecondaryClassKeyAttributeBoost(this, { checkpoint: "applyAE" });
+            } catch (err) {
+                console.error(`PF2e Awesome Variant Rules | Dual Class key attribute boost error for ${this.name}:`, err);
             }
-            return result;
-        };
-    }
+        }
+        return result;
+    });
 
     // 3. Wrap `ActorPF2e.prototype.prepareDerivedData` (runs via `super.prepareDerivedData()`
     //    inside `CharacterPF2e.prepareDerivedData`, right AFTER abilities are built and
     //    right BEFORE HP, AC, Saves, Perception, Skills, Strikes, Class DCs, and Spellcasting).
-    const BaseActorClass = CONFIG.Actor?.documentClass;
-    if (BaseActorClass?.prototype && BaseActorClass.prototype !== proto && typeof BaseActorClass.prototype.prepareDerivedData === "function") {
-        const originalBaseDerived = BaseActorClass.prototype.prepareDerivedData;
-        BaseActorClass.prototype.prepareDerivedData = function (...args) {
-            const result = originalBaseDerived.apply(this, args);
+    if (hasCharacterClass && CONFIG.Actor?.documentClass?.prototype !== CONFIG.PF2E.Actor.documentClasses.character.prototype) {
+        registerWrapper("CONFIG.Actor.documentClass.prototype.prepareDerivedData", function (wrapped, ...args) {
+            const result = wrapped.apply(this, args);
             if (this.type === "character") {
                 try {
                     applySecondaryClassKeyAttributeBoost(this, { checkpoint: "baseDerived" });
@@ -992,26 +984,23 @@ function installDualClassWrappers() {
                 }
             }
             return result;
-        };
+        });
     }
 
     // 4. Wrap `CharacterPF2e.prototype.prepareDerivedData` -> fallback check for feat group
     //    and key attribute boost verification.
-    if (typeof proto.prepareDerivedData === "function") {
-        const originalDerived = proto.prepareDerivedData;
-        proto.prepareDerivedData = function (...args) {
-            const result = originalDerived.apply(this, args);
-            if (this.type === "character" && isDualClassEnabled() && getSecondaryClassData(this)) {
-                try {
-                    applySecondaryClassKeyAttributeBoost(this, { checkpoint: "postDerived" });
-                    ensureDualClassFeatGroupFallback(this);
-                } catch (err) {
-                    console.error(`PF2e Awesome Variant Rules | Dual Class prepareDerivedData error for ${this.name}:`, err);
-                }
+    registerWrapper(`${charPath}.prepareDerivedData`, function (wrapped, ...args) {
+        const result = wrapped.apply(this, args);
+        if (this.type === "character" && isDualClassEnabled() && getSecondaryClassData(this)) {
+            try {
+                applySecondaryClassKeyAttributeBoost(this, { checkpoint: "postDerived" });
+                ensureDualClassFeatGroupFallback(this);
+            } catch (err) {
+                console.error(`PF2e Awesome Variant Rules | Dual Class prepareDerivedData error for ${this.name}:`, err);
             }
-            return result;
-        };
-    }
+        }
+        return result;
+    });
 
     wrappersInstalled = true;
 }
