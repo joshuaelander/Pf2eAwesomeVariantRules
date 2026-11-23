@@ -117,39 +117,74 @@ function getItemSourceUuid(item) {
 }
 
 /**
- * Collect all ancestry & versatile heritage traits for a character actor.
+ * Resolve the set of valid feat trait slugs accepted by PF2e's Compendium Browser (Svelecte).
+ * Checks live Compendium Browser options first, falling back to `CONFIG.PF2E.featTraits`.
+ *
+ * @param {Array<{ value: string, label: string }>} [liveOptions]
+ * @returns {Set<string>}
+ */
+function getValidFeatTraitSlugs(liveOptions = null) {
+    const valid = new Set();
+    const opts = Array.isArray(liveOptions) && liveOptions.length > 0
+        ? liveOptions
+        : game.pf2e?.compendiumBrowser?.tabs?.feat?.filterData?.multiselects?.traits?.options;
+
+    if (Array.isArray(opts)) {
+        for (const o of opts) {
+            if (o?.value) valid.add(o.value);
+        }
+    }
+    for (const key of Object.keys(CONFIG.PF2E?.featTraits ?? {})) {
+        valid.add(key);
+    }
+    return valid;
+}
+
+/**
+ * Collect valid ancestry & versatile heritage feat traits for a character actor.
+ * Filters strictly against PF2e's registered ancestry/heritage traits AND valid feat traits
+ * so regular heritage slugs (e.g. `death-warden-dwarf`, `healer-samsaran`) and sanctification/
+ * creature traits (e.g. `holy`, `humanoid`) are never passed to Svelecte.
+ *
  * @param {Actor} actor
  * @returns {string[]}
  */
 function collectActorAncestryTraits(actor) {
+    const validAncestryTraits = new Set([
+        ...Object.keys(CONFIG.PF2E?.ancestryTraits ?? {}),
+        ...Object.keys(CONFIG.PF2E?.heritageTraits ?? {})
+    ]);
+    const validFeatTraits = getValidFeatTraitSlugs();
+
     const traits = new Set();
-    const add = (val) => {
+    const addIfValid = (val, { requireAncestryTrait = true } = {}) => {
         const s = normalizeSlug(val);
-        if (s) traits.add(s);
+        if (!s) return;
+        if (validFeatTraits.size > 0 && !validFeatTraits.has(s)) return;
+        if (requireAncestryTrait && validAncestryTraits.size > 0 && !validAncestryTraits.has(s)) return;
+        traits.add(s);
     };
 
-    add(actor?.ancestry?.slug);
-    for (const t of actor?.ancestry?.system?.traits?.value ?? []) add(t);
+    // 1. Primary ancestry slug & traits
+    addIfValid(actor?.ancestry?.slug);
+    for (const t of actor?.ancestry?.system?.traits?.value ?? []) addIfValid(t);
 
-    add(actor?.heritage?.slug);
-    for (const t of actor?.heritage?.system?.traits?.value ?? []) add(t);
+    // 2. Heritage traits (only valid ancestry/versatile-heritage traits — skips non-trait slugs like `death-warden-dwarf`)
+    addIfValid(actor?.heritage?.slug);
+    for (const t of actor?.heritage?.system?.traits?.value ?? []) addIfValid(t);
 
-    for (const t of actor?.system?.traits?.value ?? []) add(t);
+    // 3. Actor-level traits (captures versatile heritages & Adopted Ancestry; skips non-ancestry traits like `holy` / `humanoid`)
+    for (const t of actor?.system?.traits?.value ?? []) addIfValid(t);
 
+    // 4. Native `ancestry` FeatGroup filter (if PF2e populated explicit traits)
     const ancestryGroup = actor?.feats?.get?.("ancestry");
     if (Array.isArray(ancestryGroup?.featFilter)) {
         for (const entry of ancestryGroup.featFilter) {
             if (typeof entry !== "string") continue;
-            if (entry.startsWith("traits-")) add(entry.slice("traits-".length));
-            else if (entry.startsWith("trait-")) add(entry.slice("trait-".length));
+            if (entry.startsWith("traits-")) addIfValid(entry.slice("traits-".length));
+            else if (entry.startsWith("trait-")) addIfValid(entry.slice("trait-".length));
         }
     }
-
-    traits.delete("humanoid");
-    traits.delete("common");
-    traits.delete("uncommon");
-    traits.delete("rare");
-    traits.delete("unique");
 
     return Array.from(traits);
 }
@@ -817,17 +852,22 @@ function applyPatchToFilterObject(filterObj, spec) {
         }
     }
 
-    // 3. Traits multiselect (strictly matching against live PF2e options when present)
+    // 3. Traits multiselect (strictly validated against live PF2e options / CONFIG.PF2E.featTraits
+    //    so Svelecte never receives an unrecognized value)
     if (Array.isArray(spec.traits) && spec.traits.length > 0) {
         const traitsMulti = filterObj.multiselects?.traits;
         if (traitsMulti && typeof traitsMulti === "object") {
             const liveOptions = Array.isArray(traitsMulti.options) ? traitsMulti.options : [];
+            const validSlugs = getValidFeatTraitSlugs(liveOptions);
             const selected = [];
 
             for (const item of spec.traits) {
-                const found = liveOptions.length > 0
-                    ? liveOptions.find(o => o.value === item.value)
-                    : { label: item.value, value: item.value };
+                let found = liveOptions.find(o => o.value === item.value);
+                if (!found && liveOptions.length === 0 && (validSlugs.size === 0 || validSlugs.has(item.value))) {
+                    const labelKey = CONFIG.PF2E?.featTraits?.[item.value];
+                    const label = labelKey ? game.i18n.localize(labelKey) : item.value;
+                    found = { label, value: item.value };
+                }
                 if (!found) continue;
 
                 const entry = { label: found.label, value: found.value };
@@ -845,14 +885,20 @@ function applyPatchToFilterObject(filterObj, spec) {
                 traitsMulti.conjunction = spec.conjunction;
             }
         } else if (filterObj.traits && typeof filterObj.traits === "object") {
+            const validSlugs = getValidFeatTraitSlugs();
+            const safeTraits = spec.traits.filter(t => validSlugs.size === 0 || validSlugs.has(t.value));
+
             if (Array.isArray(filterObj.traits.selected)) {
-                filterObj.traits.selected = spec.traits.map(t => ({
-                    label: t.value,
-                    value: t.value,
-                    ...(t.not ? { not: true } : {})
-                }));
+                filterObj.traits.selected = safeTraits.map(t => {
+                    const labelKey = CONFIG.PF2E?.featTraits?.[t.value];
+                    return {
+                        label: labelKey ? game.i18n.localize(labelKey) : t.value,
+                        value: t.value,
+                        ...(t.not ? { not: true } : {})
+                    };
+                });
             } else if (Array.isArray(filterObj.traits.values)) {
-                filterObj.traits.values = spec.traits.filter(t => !t.not).map(t => t.value);
+                filterObj.traits.values = safeTraits.filter(t => !t.not).map(t => t.value);
             }
             if (spec.conjunction) {
                 filterObj.traits.conjunction = spec.conjunction;
