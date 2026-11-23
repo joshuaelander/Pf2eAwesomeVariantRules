@@ -755,7 +755,8 @@ async function buildBrowsePatchSpec(ctx) {
                     uuids: matchResult.uuids,
                     names: matchResult.names,
                     dedicationNames: matchResult.dedicationNames,
-                    hasAdditionalFeats: matchResult.hasAdditionalFeats
+                    hasAdditionalFeats: matchResult.hasAdditionalFeats,
+                    maxLevel: slotLevel ?? actorLevel
                 };
             } else {
                 // Fallback if no matching feats found: show general non-dedication Archetype feats
@@ -967,46 +968,48 @@ function syncArchetypeScopeBanner(featTab, reopenFn) {
         ev.preventDefault();
         ev.stopPropagation();
 
-        const prevMaxLevel = featTab.filterData?.sliders?.level?.values?.max ?? null;
         const prevDirection = featTab.filterData?.order?.direction ?? (isSortLevelDescEnabled() ? "desc" : "asc");
 
+        // 1. Clear archetype scope and restore the full indexData array immediately
         clearArchetypeScope(featTab);
 
-        let freshFilter = null;
-        try {
-            if (typeof featTab.getFilterData === "function") {
-                freshFilter = await featTab.getFilterData();
-            } else if (featTab.filterData) {
-                freshFilter = foundry.utils.deepClone(featTab.filterData);
-            }
-        } catch {
-            freshFilter = featTab.filterData ? foundry.utils.deepClone(featTab.filterData) : null;
-        }
+        // 2. Clone the exact filter/options that PF2e itself passed when opening this slot
+        //    so PF2e's native level range (whether `level`, `sliders.level`, or `maxLevel`)
+        //    is preserved verbatim, changing ONLY category (`Class Feat`) and trait (`Archetype`).
+        const clearPatch = {
+            sortLevelDesc: prevDirection === "desc",
+            categories: ["class"],
+            replaceCategories: true,
+            traits: [{ value: "archetype", not: false }],
+            conjunction: "and"
+        };
 
-        if (freshFilter) {
-            applyPatchToFilterObject(freshFilter, {
-                sortLevelDesc: prevDirection === "desc",
-                categories: ["class", "skill"],
-                replaceCategories: true,
-                traits: [{ value: "archetype", not: false }],
-                conjunction: "and"
-            });
-            if (prevMaxLevel && freshFilter.sliders?.level?.values) {
-                freshFilter.sliders.level.values.max = prevMaxLevel;
-            }
-        }
-
+        // 3. Re-open with cloned native args + force Svelte refresh
         try {
-            if (reopenFn && freshFilter) {
-                await reopenFn(freshFilter);
-            } else if (typeof browser?.openTab === "function") {
-                await browser.openTab("feat", freshFilter);
-            } else {
-                browser?.render?.({ force: true });
+            if (reopenFn) {
+                await reopenFn(clearPatch);
+            }
+            if (typeof browser?.render === "function") {
+                await browser.render({ force: true });
             }
         } catch {
             try { browser?.render?.({ force: true }); } catch { /* ignore */ }
         }
+
+        // 4. Nudge Svelte's reactive search filter state on the next tick so the visible
+        //    result list always recomputes immediately over the restored full indexData
+        setTimeout(() => {
+            const liveRoot = browser?.element instanceof HTMLElement ? browser.element : browser?.element?.[0];
+            if (!liveRoot) return;
+            const searchInput = liveRoot.querySelector('input[type="search"], input[name="textFilter"], input[placeholder*="Search" i]');
+            if (searchInput) {
+                const origVal = searchInput.value;
+                searchInput.value = origVal ? `${origVal} ` : " ";
+                searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+                searchInput.value = origVal;
+                searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+        }, 30);
     });
 
     resultsArea.prepend(banner);
@@ -1110,18 +1113,37 @@ function wrapCompendiumBrowser() {
     const originalTabOpen = typeof featTab.open === "function" ? featTab.open.bind(featTab) : null;
     const originalBrowserOpenTab = typeof browser.openTab === "function" ? browser.openTab.bind(browser) : null;
 
-    const reopenFeatTabClean = async (freshFilter) => {
-        if (originalTabOpen) {
-            return originalTabOpen(freshFilter);
+    // Store a deep clone of the exact call style & arguments PF2e passed when opening the slot
+    // (preserving native level caps / options verbatim across PF2e versions).
+    let lastOpenSnapshot = null;
+
+    const reopenFeatTabWithPatch = async (patchSpec) => {
+        if (lastOpenSnapshot) {
+            const clonedArgs = foundry.utils.deepClone(lastOpenSnapshot.args);
+            const targetFilter = extractFilterFromArg(clonedArgs[0]) || extractFilterFromArg(clonedArgs[1]);
+            if (targetFilter) {
+                applyPatchToFilterObject(targetFilter, patchSpec);
+            }
+            if (lastOpenSnapshot.via === "browser" && originalBrowserOpenTab) {
+                return originalBrowserOpenTab(...clonedArgs);
+            }
+            if (originalTabOpen) {
+                return originalTabOpen(...clonedArgs);
+            }
         }
-        if (originalBrowserOpenTab) {
-            return originalBrowserOpenTab("feat", freshFilter);
+
+        // Fallback if no snapshot was captured
+        const clonedFilter = featTab.filterData ? foundry.utils.deepClone(featTab.filterData) : null;
+        if (clonedFilter) {
+            applyPatchToFilterObject(clonedFilter, patchSpec);
+            if (originalTabOpen) return originalTabOpen(clonedFilter);
+            if (originalBrowserOpenTab) return originalBrowserOpenTab("feat", clonedFilter);
         }
     };
 
     let handlingOpen = false;
 
-    const runEnhancedFeatOpen = async (invokeOriginal, args) => {
+    const runEnhancedFeatOpen = async (via, invokeOriginal, args) => {
         if (handlingOpen) {
             return invokeOriginal(...args);
         }
@@ -1134,6 +1156,13 @@ function wrapCompendiumBrowser() {
 
         handlingOpen = true;
         try {
+            // Snapshot PF2e's exact original args before we patch them (preserves native level range & options)
+            try {
+                lastOpenSnapshot = { via, args: foundry.utils.deepClone(args) };
+            } catch {
+                lastOpenSnapshot = null;
+            }
+
             const patchSpec = await buildBrowsePatchSpec(ctx);
             if (!patchSpec) {
                 clearArchetypeScope(featTab);
@@ -1160,10 +1189,7 @@ function wrapCompendiumBrowser() {
                 const beforeLen = featTab.indexData.length;
                 applyIndexDataScope(featTab);
                 if (featTab.indexData.length !== beforeLen) {
-                    const refreshedFilter = featTab.filterData ? foundry.utils.deepClone(featTab.filterData) : filterArg;
-                    if (refreshedFilter) {
-                        await reopenFeatTabClean(refreshedFilter);
-                    }
+                    await reopenFeatTabWithPatch(patchSpec);
                 }
             }
 
@@ -1176,7 +1202,7 @@ function wrapCompendiumBrowser() {
                 }
             }
 
-            setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabClean), 60);
+            setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabWithPatch), 60);
 
             return result;
         } finally {
@@ -1186,7 +1212,7 @@ function wrapCompendiumBrowser() {
 
     if (originalTabOpen) {
         featTab.open = async function (...args) {
-            return runEnhancedFeatOpen(originalTabOpen, args);
+            return runEnhancedFeatOpen("tab", originalTabOpen, args);
         };
     }
 
@@ -1197,6 +1223,7 @@ function wrapCompendiumBrowser() {
                 return originalBrowserOpenTab(tabName, ...rest);
             }
             return runEnhancedFeatOpen(
+                "browser",
                 (...allArgs) => originalBrowserOpenTab(...allArgs),
                 [tabName, ...rest]
             );
@@ -1205,7 +1232,7 @@ function wrapCompendiumBrowser() {
 
     Hooks.on("renderCompendiumBrowser", () => {
         if (featTab._pf2eAvrArchetypeScope) {
-            setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabClean), 40);
+            setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabWithPatch), 40);
         }
     });
 
