@@ -198,30 +198,7 @@
 }
 
 /* ------------------------------------------------------------------------- */
-/* 2. SKILLS TAB ADDITIONAL SKILLS INFO NOTE                                 */
-/* ------------------------------------------------------------------------- */
-
-.pf2e-avr-dc-skills-note {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 4px 0 8px 0;
-    padding: 5px 10px;
-    background: rgba(253, 250, 243, 0.88);
-    border: 1px solid rgba(124, 26, 26, 0.35);
-    border-left: 3px solid #7c1a1a;
-    border-radius: 3px;
-    font-size: 0.85em;
-    color: #191813;
-}
-
-.pf2e-avr-dc-skills-note i {
-    color: #7c1a1a;
-    flex-shrink: 0;
-}
-
-/* ------------------------------------------------------------------------- */
-/* 3. ATTRIBUTE BUILDER DUAL CLASS BANNER                                    */
+/* 2. ATTRIBUTE BUILDER DUAL CLASS BANNER                                    */
 /* ------------------------------------------------------------------------- */
 
 .pf2e-avr-dc-attr-banner {

@@ -2078,27 +2078,6 @@ function registerCharacterSheetIntegration() {
                 primaryClassEl.insertAdjacentElement("afterend", container);
             }
         }
-
-        // --- B. Skills Tab: Show Higher Additional Trained Skills Info Pill ---
-        if (summary && !root.querySelector(".pf2e-avr-dc-skills-note")) {
-            const profTab = root.querySelector('.tab[data-tab="proficiencies"], .tab[data-tab="skills"]');
-            if (profTab && summary.additionalSkills.secondary > summary.additionalSkills.primary) {
-                const intMod = Number(actor.system?.abilities?.int?.mod ?? 0);
-                const totalAdditional = Math.max(0, summary.additionalSkills.effective + intMod);
-                const note = document.createElement("div");
-                note.className = "pf2e-avr-dc-skills-note";
-                note.innerHTML = `
-                    <i class="fa-solid fa-graduation-cap"></i>
-                    <span>
-                        <strong>Dual Class Skills:</strong>
-                        Using higher additional skill count from <strong>${esc(summary.secondaryName)}</strong>:
-                        <strong>${summary.additionalSkills.effective} + INT (${totalAdditional} total)</strong>
-                        plus auto-trained skills from both classes.
-                    </span>
-                `;
-                profTab.prepend(note);
-            }
-        }
     });
 }
 

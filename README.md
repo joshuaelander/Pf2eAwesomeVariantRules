@@ -88,7 +88,7 @@ Full native Pathfinder 2e **Dual-Class PCs** support directly on the character s
   - **Hit Points**: Automatically uses the **higher** HP per level between both classes (never summed).
   - **Saving Throws, Perception, Weapon/Armor Proficiencies & Spellcasting**: Uses the **highest** proficiency rank from either class at level 1, and higher-level upgrades from both classes' features apply natively via PF2e's Rule Element engine.
   - **Key Attribute Boosts**: Grants the 1st-level key attribute boost from both classes (respecting PF2e's level-1 +4 cap, partial boosts above +4, Apex items, and raw non-stacking when both classes share the same key attribute), with inline selection for multi-option classes and live display inside PF2e's **Attribute Builder**.
-  - **Skills**: Automatically trains fixed skills from **both** classes and displays the **higher** additional skill allowance when the second class grants more skills.
+  - **Skills**: Automatically trains fixed skills from **both** classes and summarizes the **higher** additional skill allowance in the Second Class tooltip.
   - **Class DCs & Roll Options**: Registers a separate Class DC for the second class using its key attribute and adds `class:<slug>` roll options so feats and predicates recognize both classes.
 - **Class Feats & Automatic Level-Up Features**:
   - Adds a dedicated **Dual Class Feats** section on the Feats tab using the second class's exact `classFeatLevels` and pre-filtered Compendium Browser traits.
