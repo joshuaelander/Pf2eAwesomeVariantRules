@@ -12,9 +12,12 @@
  * - Smart Free Archetype Filtering (optional setting, off by default):
  *   - Before picking a dedication (or Level 2 with no dedication): filters to `Class Feat` with
  *     `Archetype` + `Dedication` (`and` conjunction).
- *   - Once a dedication is chosen (Level > 2 slots or header Browse): selects `Class Feat` + `Skill Feat`,
- *     includes `Archetype`, excludes `Dedication` (`not: true`), and scopes results to feats in the
- *     chosen dedication(s)' transitive prerequisite chain (with a one-click Clear button in the browser).
+ *   - Once a dedication is chosen (Level > 2 slots or header Browse): excludes `Dedication`
+ *     (`not: true`) and scopes results to BOTH:
+ *       1. All archetype feats in the chosen dedication(s)' transitive prerequisite chain, AND
+ *       2. All "Additional Feats" dynamically parsed from PF2e's own Archetypes Journal pages
+ *          and the Dedication feat's description (zero hardcoded lists; auto-updates with PF2e!).
+ *     Includes a one-click "Clear Archetype Filter" banner inside the browser.
  * - Sort Feats by Level Descending (optional setting, off by default):
  *   Sets `order.by = "level"` and `order.direction = "desc"` so highest-level feats appear at the top.
  */
@@ -30,8 +33,18 @@ let pendingBrowseContext = null;
 /** Guard against wrapping Compendium Browser methods multiple times */
 let browserWrapped = false;
 
-/** Cached archetype feat metadata across compendium packs: Map<uuid, { uuid, name, normName, traits, prereqs }> */
-let archetypeFeatIndexCache = null;
+/**
+ * Cached feat index across all Item compendiums & World Items:
+ * Map<uuid, { uuid, name, normName, category, traits, prereqs }>
+ */
+let allFeatsIndexCache = null;
+
+/**
+ * Cached Archetypes journal pages loaded lazily from `pf2e.journals` (and any module/world
+ * journals whose title mentions "archetype"):
+ * Array<{ name, normName, text }>
+ */
+let archetypeJournalPagesCache = null;
 
 /* ------------------------------------------------------------------------- */
 /* 1. SETTINGS REGISTRATION                                                  */
@@ -49,7 +62,7 @@ export function registerSmartFeatBrowserSettings() {
 
     game.settings.register(MODULE_ID, "smartArchetypeBrowseEnabled", {
         name: "Smart Free Archetype Browser Filtering",
-        hint: "Improves PF2e's Free Archetype Browse button: includes both Archetype and Dedication traits before choosing a dedication; once you have a dedication, excludes Dedication feats on higher-level slots and filters to feats from your chosen archetype(s) with a one-click clear button.",
+        hint: "Improves PF2e's Free Archetype Browse button: includes both Archetype and Dedication traits before choosing a dedication; once you have a dedication, excludes Dedication feats on higher-level slots and filters to feats from your chosen archetype(s) (including Additional Feats from PF2e's Archetypes journal) with a one-click clear button.",
         scope: "world",
         config: true,
         type: Boolean,
@@ -74,7 +87,7 @@ export function isSmartArchetypeBrowseEnabled() {
 }
 
 /* ------------------------------------------------------------------------- */
-/* 2. TRAIT & ARCHETYPE PREREQUISITE HELPERS                                 */
+/* 2. TRAIT, PREREQUISITE & ARCHETYPE JOURNAL HELPERS                        */
 /* ------------------------------------------------------------------------- */
 
 function normalizeSlug(raw) {
@@ -94,6 +107,16 @@ function normalizeName(raw) {
 }
 
 /**
+ * Extract the source compendium UUID of an embedded item (Foundry v12-v14).
+ */
+function getItemSourceUuid(item) {
+    return item?._stats?.compendiumSource
+        ?? item?.flags?.core?.sourceId
+        ?? item?.sourceId
+        ?? null;
+}
+
+/**
  * Collect all ancestry & versatile heritage traits for a character actor.
  * @param {Actor} actor
  * @returns {string[]}
@@ -105,18 +128,14 @@ function collectActorAncestryTraits(actor) {
         if (s) traits.add(s);
     };
 
-    // Primary ancestry
     add(actor?.ancestry?.slug);
     for (const t of actor?.ancestry?.system?.traits?.value ?? []) add(t);
 
-    // Heritage / Versatile Heritage
     add(actor?.heritage?.slug);
     for (const t of actor?.heritage?.system?.traits?.value ?? []) add(t);
 
-    // Actor-level traits (includes granted versatile heritage & adopted ancestry traits)
     for (const t of actor?.system?.traits?.value ?? []) add(t);
 
-    // Also inspect native `ancestry` FeatGroup filter if it exposes trait slugs
     const ancestryGroup = actor?.feats?.get?.("ancestry");
     if (Array.isArray(ancestryGroup?.featFilter)) {
         for (const entry of ancestryGroup.featFilter) {
@@ -126,7 +145,6 @@ function collectActorAncestryTraits(actor) {
         }
     }
 
-    // Remove non-ancestry generic creature traits
     traits.delete("humanoid");
     traits.delete("common");
     traits.delete("uncommon");
@@ -149,13 +167,14 @@ function getActorDedicationFeats(actor) {
 }
 
 /**
- * Build (and cache) an index of all archetype feats across Item compendiums and World Items,
- * storing their traits and prerequisite strings so we can match follow-up feats for any dedication.
+ * Build (and cache once per session) an index of ALL feat items across Item compendiums & World Items.
+ * Uses fast `pack.getIndex` calls (never loading full documents) so we can match both
+ * prerequisite chains AND validate `@UUID[...]` Additional Feats from PF2e's Archetypes journal.
  *
- * @returns {Promise<Map<string, { uuid: string, name: string, normName: string, traits: string[], prereqs: string[] }>>}
+ * @returns {Promise<Map<string, { uuid: string, name: string, normName: string, category: string, traits: string[], prereqs: string[] }>>}
  */
-async function getArchetypeFeatIndex() {
-    if (archetypeFeatIndexCache) return archetypeFeatIndexCache;
+async function getAllFeatsIndex() {
+    if (allFeatsIndexCache) return allFeatsIndexCache;
 
     const indexMap = new Map();
 
@@ -169,22 +188,24 @@ async function getArchetypeFeatIndex() {
             .map(normalizeName);
     };
 
-    const addEntry = (uuid, name, traitsRaw, prereqsRaw) => {
+    const addEntry = (uuid, name, categoryRaw, traitsRaw, prereqsRaw) => {
+        if (!uuid) return;
         const traits = Array.isArray(traitsRaw) ? traitsRaw : [];
-        if (!traits.includes("archetype")) return;
+        const category = String(categoryRaw || "").toLowerCase().trim();
         indexMap.set(uuid, {
             uuid,
             name: String(name || ""),
             normName: normalizeName(name),
+            category,
             traits,
             prereqs: extractPrereqs(prereqsRaw)
         });
     };
 
-    // 1. World feat items (homebrew archetypes)
+    // 1. World feat items (homebrew feats / archetypes)
     for (const item of game.items ?? []) {
         if (item.type !== "feat") continue;
-        addEntry(item.uuid, item.name, item.system?.traits?.value, item.system?.prerequisites);
+        addEntry(item.uuid, item.name, item.system?.category, item.system?.traits?.value, item.system?.prerequisites);
     }
 
     // 2. Compendium feat packs
@@ -198,7 +219,7 @@ async function getArchetypeFeatIndex() {
         let idx;
         try {
             idx = await pack.getIndex({
-                fields: ["type", "name", "system.traits.value", "system.prerequisites.value"]
+                fields: ["type", "name", "system.category", "system.traits.value", "system.prerequisites.value"]
             });
         } catch {
             continue;
@@ -207,29 +228,249 @@ async function getArchetypeFeatIndex() {
         for (const entry of idx) {
             if (entry.type !== "feat") continue;
             const uuid = entry.uuid || `Compendium.${pack.collection}.Item.${entry._id}`;
-            addEntry(uuid, entry.name, entry.system?.traits?.value, entry.system?.prerequisites);
+            addEntry(uuid, entry.name, entry.system?.category, entry.system?.traits?.value, entry.system?.prerequisites);
         }
     }
 
-    archetypeFeatIndexCache = indexMap;
+    allFeatsIndexCache = indexMap;
     return indexMap;
 }
 
 /**
- * Compute the transitive set of archetype feat UUIDs & normalized names belonging to the
- * actor's chosen dedication(s). Includes both direct dedication follow-ups and multi-step chains
- * (e.g. "Beastmaster Dedication" -> "Mature Beastmaster Companion" -> "Incredible Beastmaster's Companion").
+ * Lazily load and cache all pages from PF2e's Archetypes journals (both compendium journals
+ * like `pf2e.journals` -> "Archetypes" and any world/module journals with "archetype" in the name).
+ *
+ * @returns {Promise<Array<{ name: string, normName: string, text: string }>>}
+ */
+async function getArchetypeJournalPages() {
+    if (archetypeJournalPagesCache) return archetypeJournalPagesCache;
+
+    const pages = [];
+    const seenPageUuids = new Set();
+
+    const collectFromJournal = (journal) => {
+        if (!journal?.pages) return;
+        for (const page of journal.pages) {
+            if (page.uuid && seenPageUuids.has(page.uuid)) continue;
+            if (page.uuid) seenPageUuids.add(page.uuid);
+
+            const content = page.text?.content ?? "";
+            if (!content) continue;
+            pages.push({
+                name: String(page.name || ""),
+                normName: normalizeName(page.name),
+                text: String(content)
+            });
+        }
+    };
+
+    // 1. World journals mentioning "archetype"
+    for (const journal of game.journal ?? []) {
+        if (String(journal.name || "").toLowerCase().includes("archetype")) {
+            collectFromJournal(journal);
+        }
+    }
+
+    // 2. Compendium journals (e.g., `pf2e.journals` -> "Archetypes", plus any module archetype journals)
+    for (const pack of game.packs ?? []) {
+        if (pack.documentName !== "JournalEntry") continue;
+        let idx;
+        try {
+            idx = await pack.getIndex({ fields: ["name"] });
+        } catch {
+            continue;
+        }
+
+        for (const entry of idx) {
+            const nameLower = String(entry.name || "").toLowerCase();
+            if (!nameLower.includes("archetype")) continue;
+            try {
+                const journalDoc = await pack.getDocument(entry._id);
+                if (journalDoc) collectFromJournal(journalDoc);
+            } catch { /* ignore */ }
+        }
+    }
+
+    archetypeJournalPagesCache = pages;
+    return pages;
+}
+
+/**
+ * Extract `@UUID[...]` targets from HTML/text.
+ * Specifically extracts links inside an "Additional Feats" block AND any links directly
+ * preceded by a PF2e feat level marker (e.g. `<strong>4th</strong> @UUID[...]`).
+ *
+ * @param {string} htmlText
+ * @returns {Array<{ uuid: string, label: string }>}
+ */
+function extractAdditionalFeatLinksFromHtml(htmlText) {
+    if (!htmlText || typeof htmlText !== "string") return [];
+
+    const results = [];
+    const seen = new Set();
+    const uuidRegex = /@UUID\[([^\]]+)\](?:\{([^}]*)\})?/g;
+
+    const addMatchesFromSlice = (slice) => {
+        uuidRegex.lastIndex = 0;
+        let m;
+        while ((m = uuidRegex.exec(slice)) !== null) {
+            const uuid = m[1].trim();
+            const label = (m[2] || "").trim();
+            if (!uuid || seen.has(uuid)) continue;
+            seen.add(uuid);
+            results.push({ uuid, label });
+        }
+    };
+
+    // 1. Look for an explicit "Additional Feats" section (standard PF2e Archetypes journal & dedication format)
+    const addFeatsIdx = htmlText.search(/additional\s+feats/i);
+    if (addFeatsIdx !== -1) {
+        let slice = htmlText.slice(addFeatsIdx);
+        // Stop if another top-level heading (`<h1`, `<h2`) appears after the Additional Feats heading itself
+        const afterHeading = slice.slice(24);
+        const nextMajorHeading = afterHeading.search(/<h[12]\b/i);
+        if (nextMajorHeading !== -1) {
+            slice = slice.slice(0, 24 + nextMajorHeading);
+        }
+        addMatchesFromSlice(slice);
+    }
+
+    // 2. Also match level-prefixed feat links anywhere on an archetype page
+    //    (e.g. `<strong>4th</strong> @UUID[...]` or `4th @UUID[...]` or `; @UUID[...]`)
+    const levelLineRegex = /(?:<strong>\s*)?\b(?:1st|2nd|3rd|(?:[4-9]|1\d|20)th)\b(?:\s*<\/strong>)?[^<]*?@UUID\[([^\]]+)\](?:\{([^}]*)\})?/gi;
+    let lm;
+    while ((lm = levelLineRegex.exec(htmlText)) !== null) {
+        const uuid = lm[1].trim();
+        const label = (lm[2] || "").trim();
+        if (!uuid || seen.has(uuid)) continue;
+        seen.add(uuid);
+        results.push({ uuid, label });
+    }
+
+    return results;
+}
+
+/**
+ * Find the matching Archetypes journal page(s) for a Dedication feat (e.g., "Bastion Dedication" -> "Bastion").
+ *
+ * @param {Item} dedicationFeat
+ * @param {Array<{ name: string, normName: string, text: string }>} journalPages
+ * @returns {Array<{ name: string, normName: string, text: string }>}
+ */
+function findJournalPagesForDedication(dedicationFeat, journalPages) {
+    const fullName = normalizeName(dedicationFeat?.name);
+    const baseName = fullName.replace(/\s+dedication$/i, "").trim();
+    const sourceUuid = getItemSourceUuid(dedicationFeat);
+    const matched = [];
+
+    for (const page of journalPages) {
+        if (baseName && page.normName === baseName) {
+            matched.push(page);
+            continue;
+        }
+        if (sourceUuid && page.text.includes(sourceUuid)) {
+            matched.push(page);
+            continue;
+        }
+        if (fullName && page.text.toLowerCase().includes(`{${fullName}}`)) {
+            matched.push(page);
+        }
+    }
+
+    return matched;
+}
+
+/**
+ * Compute the complete set of feat UUIDs & names belonging to the actor's chosen dedication(s):
+ * 1. Transitive prerequisite chain across all `archetype` feats in compendiums & world.
+ * 2. Additional Feats dynamically parsed from PF2e's own Archetypes journal pages AND
+ *    the dedication feat's own description (zero hardcoded lists).
+ *
+ * Also reports whether any matched feats are non-archetype Additional Feats and which feat
+ * categories (`class`, `skill`, `general`, etc.) are represented.
  *
  * @param {Actor} actor
  * @param {Item[]} dedications
- * @returns {Promise<{ uuids: Set<string>, names: Set<string>, dedicationNames: string[] }>}
+ * @returns {Promise<{
+ *   uuids: Set<string>,
+ *   names: Set<string>,
+ *   dedicationNames: string[],
+ *   hasAdditionalFeats: boolean,
+ *   categories: string[]
+ * }>}
  */
 async function computeArchetypeMatchingFeats(actor, dedications) {
-    const featIndex = await getArchetypeFeatIndex();
-    const dedicationNames = dedications.map(d => d.name);
+    const [allFeatsIndex, journalPages] = await Promise.all([
+        getAllFeatsIndex(),
+        getArchetypeJournalPages()
+    ]);
 
-    // Seed with the actor's dedication names plus any archetype feats the actor already owns
-    const knownNames = new Set(dedicationNames.map(normalizeName));
+    const dedicationNames = dedications.map(d => d.name);
+    const dedicationUuids = new Set(
+        dedications.flatMap(d => [d.uuid, getItemSourceUuid(d)].filter(Boolean))
+    );
+
+    const matchingUuids = new Set();
+    const matchingNames = new Set();
+    const categoriesSet = new Set(["class"]);
+    let hasAdditionalFeats = false;
+
+    const recordMatchedFeat = (entry, isFromAdditional = false) => {
+        if (!entry) return;
+        if (entry.traits.includes("dedication")) return;
+        if (dedicationUuids.has(entry.uuid)) return;
+
+        matchingUuids.add(entry.uuid);
+        if (entry.normName) matchingNames.add(entry.normName);
+        if (entry.category) categoriesSet.add(entry.category);
+        if (isFromAdditional || !entry.traits.includes("archetype")) {
+            hasAdditionalFeats = true;
+        }
+    };
+
+    // Build a quick lookup by normalized name for fallback matching when journal UUIDs differ slightly
+    const featsByNormName = new Map();
+    for (const entry of allFeatsIndex.values()) {
+        if (entry.normName && !featsByNormName.has(entry.normName)) {
+            featsByNormName.set(entry.normName, entry);
+        }
+    }
+
+    // --- Pass 1: Extract "Additional Feats" dynamically from Archetypes journal & dedication descriptions ---
+    for (const dedication of dedications) {
+        const htmlSources = [];
+
+        // Check dedication feat's own description
+        const desc = dedication.system?.description?.value;
+        if (typeof desc === "string" && desc.length > 0) {
+            htmlSources.push(desc);
+        }
+
+        // Check matching page(s) in PF2e's Archetypes journal
+        const pages = findJournalPagesForDedication(dedication, journalPages);
+        for (const page of pages) {
+            htmlSources.push(page.text);
+        }
+
+        for (const html of htmlSources) {
+            const links = extractAdditionalFeatLinksFromHtml(html);
+            for (const link of links) {
+                let featEntry = allFeatsIndex.get(link.uuid);
+                if (!featEntry && link.label) {
+                    featEntry = featsByNormName.get(normalizeName(link.label));
+                }
+                if (featEntry) {
+                    recordMatchedFeat(featEntry, !featEntry.traits.includes("archetype"));
+                }
+            }
+        }
+    }
+
+    // --- Pass 2: Transitive prerequisite chain across all `archetype` feats ---
+    const knownNames = new Set([
+        ...dedicationNames.map(normalizeName),
+        ...matchingNames
+    ]);
     for (const feat of actor?.itemTypes?.feat ?? []) {
         const traits = feat.system?.traits?.value ?? [];
         if (Array.isArray(traits) && traits.includes("archetype")) {
@@ -237,17 +478,15 @@ async function computeArchetypeMatchingFeats(actor, dedications) {
         }
     }
 
-    const matchingUuids = new Set();
-    const matchingNames = new Set();
-
     let changed = true;
     let guard = 0;
     while (changed && guard < 8) {
         changed = false;
         guard++;
 
-        for (const entry of featIndex.values()) {
+        for (const entry of allFeatsIndex.values()) {
             if (matchingUuids.has(entry.uuid)) continue;
+            if (!entry.traits.includes("archetype")) continue;
             if (entry.traits.includes("dedication")) continue;
             if (entry.prereqs.length === 0) continue;
 
@@ -260,19 +499,22 @@ async function computeArchetypeMatchingFeats(actor, dedications) {
             });
 
             if (matches) {
-                matchingUuids.add(entry.uuid);
-                if (entry.normName) {
-                    matchingNames.add(entry.normName);
-                    if (!knownNames.has(entry.normName)) {
-                        knownNames.add(entry.normName);
-                        changed = true;
-                    }
+                recordMatchedFeat(entry, false);
+                if (entry.normName && !knownNames.has(entry.normName)) {
+                    knownNames.add(entry.normName);
+                    changed = true;
                 }
             }
         }
     }
 
-    return { uuids: matchingUuids, names: matchingNames, dedicationNames };
+    return {
+        uuids: matchingUuids,
+        names: matchingNames,
+        dedicationNames,
+        hasAdditionalFeats,
+        categories: Array.from(categoriesSet)
+    };
 }
 
 /**
@@ -322,7 +564,6 @@ function detectFeatBrowseTarget(target, actor) {
     }
     if (!trigger) return null;
 
-    // 1. Check direct slot ID (e.g., `dualclass-6`, `ancestryparagon-3`, `archetype-4`, `class-8`)
     const slotContainer = trigger.closest("[data-slot-id]") || trigger;
     const slotId = slotContainer?.dataset?.slotId || trigger.dataset?.slotId || null;
     let groupId = null;
@@ -344,7 +585,6 @@ function detectFeatBrowseTarget(target, actor) {
         }
     }
 
-    // 2. Check explicit group container attributes
     if (!groupId) {
         const groupContainer = trigger.closest("[data-group-id], [data-category-id], [data-feat-group], [data-group]");
         const rawGroup = groupContainer?.dataset?.groupId
@@ -359,7 +599,6 @@ function detectFeatBrowseTarget(target, actor) {
         }
     }
 
-    // 3. Fallback: inspect the nearest heading / header row (NEVER climbing up to `.tab`)
     if (!groupId) {
         let headerEl = trigger.closest("header, .header");
         if (!headerEl) {
@@ -481,7 +720,7 @@ async function buildBrowsePatchSpec(ctx) {
         hasAnyChange = true;
     }
 
-    // 3. Free Archetype -> Smart Dedication vs Chosen Archetype Follow-up Filtering
+    // 3. Free Archetype -> Smart Dedication vs Chosen Archetype Follow-up (+ Additional Feats) Filtering
     else if (groupId === "archetype" && isSmartArchetypeBrowseEnabled()) {
         const dedications = getActorDedicationFeats(actor);
         const actorLevel = Number(actor?.level ?? actor?.system?.details?.level?.value ?? 1);
@@ -498,19 +737,35 @@ async function buildBrowsePatchSpec(ctx) {
             hasAnyChange = true;
         } else {
             const matchResult = await computeArchetypeMatchingFeats(actor, dedications);
-            spec.categories = ["class", "skill"];
-            spec.replaceCategories = true;
-            spec.traits = [
-                { value: "archetype", not: false },
-                { value: "dedication", not: true }
-            ];
-            spec.conjunction = "and";
+
             if (matchResult.uuids.size > 0) {
+                spec.categories = matchResult.categories.length > 0 ? matchResult.categories : ["class", "skill"];
+                spec.replaceCategories = true;
+                // Important: "Additional Feats" (e.g., Quick Shield Block, Shield Warden) are class/skill/general
+                // feats that do NOT carry the `archetype` trait. When Additional Feats are present in the
+                // scoped dataset, we exclude `dedication` without forcing the `archetype` trait so they show up!
+                spec.traits = matchResult.hasAdditionalFeats
+                    ? [{ value: "dedication", not: true }]
+                    : [
+                        { value: "archetype", not: false },
+                        { value: "dedication", not: true }
+                    ];
+                spec.conjunction = "and";
                 spec.archetypeScope = {
                     uuids: matchResult.uuids,
                     names: matchResult.names,
-                    dedicationNames: matchResult.dedicationNames
+                    dedicationNames: matchResult.dedicationNames,
+                    hasAdditionalFeats: matchResult.hasAdditionalFeats
                 };
+            } else {
+                // Fallback if no matching feats found: show general non-dedication Archetype feats
+                spec.categories = ["class", "skill"];
+                spec.replaceCategories = true;
+                spec.traits = [
+                    { value: "archetype", not: false },
+                    { value: "dedication", not: true }
+                ];
+                spec.conjunction = "and";
             }
             hasAnyChange = true;
         }
@@ -605,11 +860,6 @@ function applyPatchToFilterObject(filterObj, spec) {
     }
 }
 
-/**
- * Extract the live filter object from arguments passed to `tabs.feat.open(...)` or `openTab("feat", ...)`.
- * @param {any} arg
- * @returns {object|null}
- */
 function extractFilterFromArg(arg) {
     if (!arg || typeof arg !== "object") return null;
     if (arg.multiselects || arg.checkboxes || arg.order || arg.sliders) return arg;
@@ -617,9 +867,6 @@ function extractFilterFromArg(arg) {
     return null;
 }
 
-/**
- * Find the property descriptor for `propName` on `obj` or its prototype chain.
- */
 function findPropertyDescriptor(obj, propName) {
     let cur = obj;
     while (cur && cur !== Object.prototype) {
@@ -630,12 +877,6 @@ function findPropertyDescriptor(obj, propName) {
     return null;
 }
 
-/**
- * Apply the active archetype scope directly to `featTab.indexData` (when writable) while
- * keeping an untouched backup in `featTab._pf2eAvrFullIndexData`.
- *
- * Works seamlessly with PF2e's Svelte Compendium Browser even if `filterIndexData` is private.
- */
 function applyIndexDataScope(featTab) {
     if (!featTab || featTab._pf2eAvrIndexDataIsGetter) return;
     const scope = featTab._pf2eAvrArchetypeScope;
@@ -643,21 +884,15 @@ function applyIndexDataScope(featTab) {
 
     if (!Array.isArray(featTab.indexData) || featTab.indexData.length === 0) return;
 
-    // Preserve full array once (or refresh backup if PF2e loaded a larger full set)
     if (!Array.isArray(featTab._pf2eAvrFullIndexData) || featTab.indexData.length > featTab._pf2eAvrFullIndexData.length) {
         featTab._pf2eAvrFullIndexData = featTab.indexData;
     }
 
     try {
         featTab.indexData = featTab._pf2eAvrFullIndexData.filter(entry => entryMatchesArchetypeScope(entry, scope));
-    } catch {
-        // Property might be non-writable; getter / getIndexData / DOM fallback will handle it
-    }
+    } catch { /* fallback hooks handle read-only cases */ }
 }
 
-/**
- * Restore `featTab.indexData` back to the full untouched dataset when clearing the archetype scope.
- */
 function restoreIndexDataScope(featTab) {
     if (!featTab || featTab._pf2eAvrIndexDataIsGetter) return;
     if (Array.isArray(featTab._pf2eAvrFullIndexData)) {
@@ -685,11 +920,6 @@ function removeArchetypeScopeBanner(root = null) {
     container?.querySelectorAll?.(".pf2e-avr-archetype-scope-banner")?.forEach(el => el.remove());
 }
 
-/**
- * Display a compact dismissible banner inside the Compendium Browser whenever results are
- * scoped to a character's chosen Dedication archetype(s), and wire both its Clear button
- * and PF2e's native "Clear All Filters" button so clearing ALWAYS refreshes Svelte immediately.
- */
 function syncArchetypeScopeBanner(featTab, reopenFn) {
     const browser = game.pf2e?.compendiumBrowser;
     const rootEl = browser?.element instanceof HTMLElement ? browser.element : browser?.element?.[0];
@@ -697,7 +927,6 @@ function syncArchetypeScopeBanner(featTab, reopenFn) {
 
     removeArchetypeScopeBanner(rootEl);
 
-    // Ensure clicking PF2e's own "Clear All Filters" button always restores our full indexData too
     if (rootEl.dataset.pf2eAvrClearSpy !== "1") {
         rootEl.dataset.pf2eAvrClearSpy = "1";
         rootEl.addEventListener("click", (ev) => {
@@ -722,11 +951,12 @@ function syncArchetypeScopeBanner(featTab, reopenFn) {
     if (!resultsArea) return;
 
     const esc = foundry.utils.escapeHTML;
+    const extraTag = scope.hasAdditionalFeats ? " (incl. Additional Feats)" : "";
     const banner = document.createElement("div");
     banner.className = "pf2e-avr-archetype-scope-banner";
     banner.innerHTML = `
         <span class="scope-text">
-            <strong>Archetype Filter:</strong> ${esc(scope.dedicationNames.join(", "))}
+            <strong>Archetype Filter:</strong> ${esc(scope.dedicationNames.join(", "))}${extraTag}
         </span>
         <button type="button" class="scope-clear-btn" title="Show all Archetype feats (including Dedications)">
             Clear Archetype Filter
@@ -737,15 +967,11 @@ function syncArchetypeScopeBanner(featTab, reopenFn) {
         ev.preventDefault();
         ev.stopPropagation();
 
-        // Capture current level slider max before clearing so we preserve the slot level cap
         const prevMaxLevel = featTab.filterData?.sliders?.level?.values?.max ?? null;
         const prevDirection = featTab.filterData?.order?.direction ?? (isSortLevelDescEnabled() ? "desc" : "asc");
 
-        // 1. Clear archetype scope and restore the full indexData array
         clearArchetypeScope(featTab);
 
-        // 2. Build a BRAND-NEW filter object (so Svelte 5 reactive state definitely detects the change!)
-        //    keeping Class + Skill feats and `Archetype` trait, while removing the `!Dedication` exclusion.
         let freshFilter = null;
         try {
             if (typeof featTab.getFilterData === "function") {
@@ -770,7 +996,6 @@ function syncArchetypeScopeBanner(featTab, reopenFn) {
             }
         }
 
-        // 3. Re-open with the fresh filter via PF2e's native open method so Svelte re-runs its derived list
         try {
             if (reopenFn && freshFilter) {
                 await reopenFn(freshFilter);
@@ -797,8 +1022,6 @@ function wrapCompendiumBrowser() {
     const featTab = browser?.tabs?.feat;
     if (!browser || !featTab) return;
 
-    // 1. Wrap `featTab.indexData` getter if it is defined as an accessor on the prototype
-    //    (handles PF2e v7/v8 private `#indexData` fields transparently!)
     const indexDataDesc = findPropertyDescriptor(featTab, "indexData");
     if (indexDataDesc?.get && indexDataDesc.configurable) {
         const origGet = indexDataDesc.get;
@@ -819,7 +1042,6 @@ function wrapCompendiumBrowser() {
         });
     }
 
-    // 2. Wrap `featTab.currentIndex` getter if present
     const currentIndexDesc = findPropertyDescriptor(featTab, "currentIndex");
     if (currentIndexDesc?.get && currentIndexDesc.configurable) {
         const origCurrentGet = currentIndexDesc.get;
@@ -837,8 +1059,6 @@ function wrapCompendiumBrowser() {
         });
     }
 
-    // 3. Wrap `featTab.loadData` so first-time initialization captures the full indexData
-    //    and immediately scopes it before Svelte renders.
     if (typeof featTab.loadData === "function") {
         const originalLoadData = featTab.loadData.bind(featTab);
         featTab.loadData = async function (...args) {
@@ -853,7 +1073,6 @@ function wrapCompendiumBrowser() {
         };
     }
 
-    // 4. Wrap `featTab.filterIndexData` (for PF2e versions where it is a public method)
     if (typeof featTab.filterIndexData === "function") {
         const originalFilterIndexData = featTab.filterIndexData.bind(featTab);
         featTab.filterIndexData = function (entry) {
@@ -868,7 +1087,6 @@ function wrapCompendiumBrowser() {
         };
     }
 
-    // 5. Wrap `featTab.getIndexData` (used by PF2e's browser pagination / result list)
     if (typeof featTab.getIndexData === "function") {
         const originalGetIndexData = featTab.getIndexData.bind(featTab);
         featTab.getIndexData = function (...args) {
@@ -881,7 +1099,6 @@ function wrapCompendiumBrowser() {
         };
     }
 
-    // 6. Wrap `featTab.resetFilters` so clicking "Clear All Filters" clears our archetype scope
     if (typeof featTab.resetFilters === "function") {
         const originalResetFilters = featTab.resetFilters.bind(featTab);
         featTab.resetFilters = function (...args) {
@@ -890,7 +1107,6 @@ function wrapCompendiumBrowser() {
         };
     }
 
-    // Capture original open functions so Clear button can trigger a clean re-render without recursion
     const originalTabOpen = typeof featTab.open === "function" ? featTab.open.bind(featTab) : null;
     const originalBrowserOpenTab = typeof browser.openTab === "function" ? browser.openTab.bind(browser) : null;
 
@@ -912,8 +1128,6 @@ function wrapCompendiumBrowser() {
 
         const ctx = consumePendingBrowseContext();
         if (!ctx) {
-            // Normal Compendium Browser open (not from a Feats-tab Browse button):
-            // always clear any leftover archetype prerequisite scope so it never leaks.
             clearArchetypeScope(featTab);
             return invokeOriginal(...args);
         }
@@ -927,7 +1141,6 @@ function wrapCompendiumBrowser() {
             }
 
             if (patchSpec.archetypeScope) {
-                // Restore full array first so re-scoping starts from the complete dataset
                 restoreIndexDataScope(featTab);
                 featTab._pf2eAvrArchetypeScope = patchSpec.archetypeScope;
                 applyIndexDataScope(featTab);
@@ -935,7 +1148,6 @@ function wrapCompendiumBrowser() {
                 clearArchetypeScope(featTab);
             }
 
-            // Look for PF2e's live filter argument (e.g., args[0] in `featTab.open(filter)` or args[1] in `openTab("feat", filter)`)
             const filterArg = extractFilterFromArg(args[0]) || extractFilterFromArg(args[1]);
             const hadFullFilter = Boolean(filterArg && (filterArg.multiselects || filterArg.checkboxes));
             if (filterArg) {
@@ -944,7 +1156,6 @@ function wrapCompendiumBrowser() {
 
             const result = await invokeOriginal(...args);
 
-            // If indexData loaded during open() and wasn't scoped yet, scope and trigger a clean refresh
             if (patchSpec.archetypeScope && !featTab._pf2eAvrIndexDataIsGetter && Array.isArray(featTab.indexData)) {
                 const beforeLen = featTab.indexData.length;
                 applyIndexDataScope(featTab);
@@ -956,8 +1167,6 @@ function wrapCompendiumBrowser() {
                 }
             }
 
-            // If PF2e created/cloned its filterData inside `open()` instead of reusing our mutated object,
-            // apply the patch to live `featTab.filterData` and refresh once if needed.
             if (featTab.filterData && (!hadFullFilter || featTab.filterData !== filterArg)) {
                 applyPatchToFilterObject(featTab.filterData, patchSpec);
                 if (!hadFullFilter) {
@@ -967,7 +1176,6 @@ function wrapCompendiumBrowser() {
                 }
             }
 
-            // Render the dismissible Archetype Filter banner if active (next tick so Svelte DOM mounts first)
             setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabClean), 60);
 
             return result;
@@ -976,14 +1184,12 @@ function wrapCompendiumBrowser() {
         }
     };
 
-    // 7. Wrap `featTab.open`
     if (originalTabOpen) {
         featTab.open = async function (...args) {
             return runEnhancedFeatOpen(originalTabOpen, args);
         };
     }
 
-    // 8. Wrap `browser.openTab`
     if (originalBrowserOpenTab) {
         browser.openTab = async function (tabName, ...rest) {
             if (tabName !== "feat") {
@@ -997,7 +1203,6 @@ function wrapCompendiumBrowser() {
         };
     }
 
-    // 9. Re-sync banner on re-render and restore full indexData on browser close
     Hooks.on("renderCompendiumBrowser", () => {
         if (featTab._pf2eAvrArchetypeScope) {
             setTimeout(() => syncArchetypeScopeBanner(featTab, reopenFeatTabClean), 40);
