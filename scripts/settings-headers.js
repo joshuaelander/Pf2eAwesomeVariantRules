@@ -71,6 +71,11 @@ const SETTINGS_SECTIONS = [
         id: "ancestry-paragon",
         title: "Ancestry Paragon Variant",
         keys: ["ancestryParagonEnabled"]
+    },
+    {
+        id: "compendium-browser",
+        title: "Compendium Browser Enhancements",
+        keys: ["featBrowserSortLevelDesc", "smartArchetypeBrowseEnabled"]
     }
 ];
 

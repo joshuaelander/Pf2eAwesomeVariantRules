@@ -41,6 +41,10 @@ import {
 } from './ancestry-paragon.js';
 import { registerSettingsHeaders } from './settings-headers.js';
 import {
+    registerSmartFeatBrowserSettings,
+    initSmartFeatBrowser
+} from './smart-feat-browser.js';
+import {
     registerRiskDiceSettings,
     registerRiskDiceSockets,
     registerRiskDiceChatListeners,
@@ -207,6 +211,9 @@ Hooks.once('init', () => {
     // Register Ancestry Paragon Variant Rule Settings (off by default)
     registerAncestryParagonSettings();
 
+    // Register Smart Feat Browser Settings (off by default)
+    registerSmartFeatBrowserSettings();
+
     // Register Settings Config Section Headers
     registerSettingsHeaders();
 
@@ -302,6 +309,9 @@ Hooks.once('ready', async () => {
     initAncestryParagon();
     game.pf2eAwesomeVariantRules.isAncestryParagonEnabled = isAncestryParagonEnabled;
     game.pf2eAwesomeVariantRules.getAncestryParagonSlotLevels = getAncestryParagonSlotLevels;
+
+    // Initialize Smart Feat Browser Enhancements
+    initSmartFeatBrowser();
 
     if (game.user.isGM) {
         const currentVersion = game.modules.get(MODULE_ID)?.version || "1.0.0";

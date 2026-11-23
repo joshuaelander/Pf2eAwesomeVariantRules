@@ -811,16 +811,20 @@ function injectDualClassFeatGroups(featsCollection) {
     if (!FeatGroupClass) return;
 
     // 1. Build class-specific featFilter matching the running PF2e version's format
-    let featFilter = [`category-class`, `traits-${secondSlug}`];
+    let featFilter = [`category-class`, `traits-${secondSlug}`, "traits-archetype"];
     if (Array.isArray(classGroup?.featFilter) && classGroup.featFilter.length > 0) {
         featFilter = classGroup.featFilter.map(entry => {
-            if (primarySlug && entry === `traits-${primarySlug}`) {
-                return `traits-${secondSlug}`;
+            if (primarySlug && typeof entry === "string") {
+                if (entry === `traits-${primarySlug}`) return `traits-${secondSlug}`;
+                if (entry === `trait-${primarySlug}`) return `trait-${secondSlug}`;
             }
             return entry;
         });
-        if (secondSlug && !featFilter.includes(`traits-${secondSlug}`)) {
+        if (secondSlug && !featFilter.includes(`traits-${secondSlug}`) && !featFilter.includes(`trait-${secondSlug}`)) {
             featFilter.push(`traits-${secondSlug}`);
+        }
+        if (!featFilter.includes("traits-archetype") && !featFilter.includes("trait-archetype")) {
+            featFilter.push("traits-archetype");
         }
     }
 

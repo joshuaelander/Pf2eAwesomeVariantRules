@@ -16,7 +16,8 @@
     "styles/risk-dice.css",
     "styles/spell-damage-modifier.css",
     "styles/dual-class.css",
-    "styles/settings-headers.css"
+    "styles/settings-headers.css",
+    "styles/smart-feat-browser.css"
   ],
   "socket": true,
   "packs": [

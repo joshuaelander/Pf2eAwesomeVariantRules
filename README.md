@@ -17,6 +17,7 @@ Contents:
 13. Spellcasting Modifiers (Done)
 14. Dual Class Variant Rule (Done)
 15. Ancestry Paragon Variant Rule (Done)
+16. Smart Feat Compendium Browser Enhancements (Done)
 
 ### Risk Dice (Tension Dice Variant)
 A dynamic tension pool mechanic for Pathfinder 2e exploration and danger:
@@ -105,6 +106,15 @@ Implements Pathfinder 2e's official **Ancestry Paragon** variant rule (*Gamemast
 - **Official Feat Progression**: Grants an extra Ancestry Feat at **1st level** and an Ancestry Feat at every odd level not already covered by standard progression (**levels 1, 3, 7, 11, 15, and 19** — for **11 total Ancestry Feats** across levels 1–20).
 - **Native Sheet Integration**: Adds an **Ancestry Paragon Feats** group right below **Ancestry Feats** on the Feats tab, inheriting the character's exact ancestry and versatile heritage Compendium Browser filters and slot level caps.
 - **Non-Destructive & Compatible**: Works standalone or alongside Dual Class and Free Archetype, avoids duplicating groups if another module already provides Ancestry Paragon slots, and preserves existing feats in Bonus Feats if disabled later.
+
+### Smart Feat Compendium Browser Enhancements
+Improves PF2e's Feats-tab **Browse** buttons without replacing PF2e's native browser flow:
+- **Dual Class Feats** *(automatic when Dual Class is enabled)*: Pre-selects **Class Feat** with the second class trait and **Archetype** (`Any of above`).
+- **Ancestry Paragon Feats** *(automatic when Ancestry Paragon is enabled)*: Pre-selects **Ancestry Feat** with the character's ancestry and versatile heritage traits (`Any of above`).
+- **Smart Free Archetype Filtering** *(optional setting, off by default)*:
+  - Before taking a dedication: filters to **Class Feat** with both **Archetype** and **Dedication** traits.
+  - After taking a dedication (on Level 4+ slots or group header Browse): excludes **Dedication** feats, keeps **Archetype**, includes archetype **Class & Skill Feats**, and scopes results to feats in your chosen dedication(s)' prerequisite chain — with a one-click **Clear Archetype Filter** banner inside the browser.
+- **Sort Feats by Level Descending** *(optional setting, off by default)*: Automatically sorts Feats-tab Browse results from highest level to lowest.
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
 
